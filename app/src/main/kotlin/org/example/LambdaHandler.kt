@@ -7,7 +7,6 @@ import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.fasterxml.jackson.core.type.TypeReference
 
 // ✅ Define Stock Data Class
 data class Stock(
@@ -35,17 +34,27 @@ class LambdaHandler : RequestHandler<Map<String, Any>, Map<String, Any>> {
     private val objectMapper = jacksonObjectMapper()
 
     override fun handleRequest(event: Map<String, Any>, context: Context): Map<String, Any> {
-        return try {
-            // ✅ Log event for debugging
-            context.logger.log("Received event: $event")
+        context.logger.log("Received event: $event")
 
-            // ✅ FIX: Explicitly specify the type
+        // ✅ Handle CORS Preflight Request
+        if (event["httpMethod"] == "OPTIONS") {
+            return mapOf(
+                "statusCode" to 200,
+                "headers" to corsHeaders(),
+                "body" to ""
+            )
+        }
+
+        return try {
+            // ✅ Parse Incoming Data
             val stock: Stock = objectMapper.convertValue(event, Stock::class.java)
 
-            val dividends: List<DividendDetail> = stock.dividends ?: emptyList()
-            val cashFlowData: List<CashFlowData> = stock.cashFlowData ?: emptyList()
-            val liabilitiesData: List<LiabilitiesData> = stock.liabilitiesData ?: emptyList()
+            // ✅ Ensure Optional Fields Have Defaults
+            val dividends = stock.dividends ?: emptyList()
+            val cashFlowData = stock.cashFlowData ?: emptyList()
+            val liabilitiesData = stock.liabilitiesData ?: emptyList()
 
+            // ✅ Prepare Item for DynamoDB
             val item = mutableMapOf<String, AttributeValue>(
                 "symbol" to AttributeValue.builder().s(stock.symbol).build(),
                 "moneyInvested" to AttributeValue.builder().n(stock.moneyInvested.toString()).build(),
@@ -70,17 +79,38 @@ class LambdaHandler : RequestHandler<Map<String, Any>, Map<String, Any>> {
                 item["taxToBePaidInPoland"] = AttributeValue.builder().nul(true).build()
             }
 
+            // ✅ Save to DynamoDB
             val putRequest = PutItemRequest.builder()
                 .tableName("Stocks")
                 .item(item)
                 .build()
-
             dynamoDbClient.putItem(putRequest)
 
-            mapOf("message" to "Stock saved successfully", "stock" to stock.symbol)
+            // ✅ Return Success Response with CORS Headers
+            mapOf(
+                "statusCode" to 200,
+                "headers" to corsHeaders(),
+                "body" to objectMapper.writeValueAsString(mapOf("message" to "Stock saved successfully", "stock" to stock.symbol))
+            )
+
         } catch (e: Exception) {
             context.logger.log("Error: ${e.message}")
-            mapOf("error" to "Failed to save stock", "message" to (e.message ?: "Unknown error"))
+
+            // ✅ Return Error Response with CORS Headers
+            mapOf(
+                "statusCode" to 500,
+                "headers" to corsHeaders(),
+                "body" to objectMapper.writeValueAsString(mapOf("error" to "Failed to save stock", "message" to (e.message ?: "Unknown error")))
+            )
         }
+    }
+
+    // ✅ Function to Return CORS Headers
+    private fun corsHeaders(): Map<String, String> {
+        return mapOf(
+            "Access-Control-Allow-Origin" to "*",
+            "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers" to "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
+        )
     }
 }
