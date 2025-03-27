@@ -24,7 +24,7 @@ class DividendService(
         ownershipPeriods: List<OwnershipPeriod>
     ): List<DividendDetail> {
         return dividends.filter { dividend ->
-            val dividendDate = LocalDate.parse(dividend.paymentDate)
+            val dividendDate = LocalDate.parse(dividend.recordDate)
             ownershipPeriods.any { period ->
                 val start = LocalDate.parse(period.startDate)
                 val end = period.endDate?.let { LocalDate.parse(it) } ?: LocalDate.now()
@@ -34,7 +34,7 @@ class DividendService(
             val period = ownershipPeriods.find { p ->
                 val start = LocalDate.parse(p.startDate)
                 val end = p.endDate?.let { LocalDate.parse(it) } ?: LocalDate.now()
-                LocalDate.parse(dividend.paymentDate) in start..end
+                LocalDate.parse(dividend.recordDate) in start..end
             }
             dividend.copy(
                 quantity = period?.quantity ?: 0.0,
