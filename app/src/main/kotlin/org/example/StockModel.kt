@@ -1,11 +1,12 @@
+
 data class Stock(
     val symbol: String,
     val moneyInvested: Double,
     val currentPrice: List<CurrentPriceData>,
     val ownershipPeriods: List<OwnershipPeriod>,
     val transactions: List<Transaction>,
-    val dividends: List<DividendDetail>?,
-    val totalDividendValue: Double,
+    var dividends: List<DividendDetail>?,
+    var totalDividendValue: Double,
     val cashFlowData: List<CashFlowData>?,
     val liabilitiesData: List<LiabilitiesData>?,
     var totalWithholdingTaxPaid: Double?,
