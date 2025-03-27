@@ -14,7 +14,7 @@ class DbService(
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
 ) {
 
-    private val tableName = "StocksTable"
+    private val tableName = "Stocks"
 
     fun getStocks(): List<Stock> {
         val request = GetItemRequest.builder()
