@@ -8,8 +8,8 @@ data class Stock(
     val totalDividendValue: Double,
     val cashFlowData: List<CashFlowData>?,
     val liabilitiesData: List<LiabilitiesData>?,
-    val totalWithholdingTaxPaid: Double?,
-    val taxToBePaidInPoland: Double?
+    var totalWithholdingTaxPaid: Double?,
+    var taxToBePaidInPoland: Double?
 )
 
 data class CurrentPriceData(
@@ -49,10 +49,10 @@ data class DividendDetail(
     val declarationDate: String,
     val quantity: Double,
     val totalDividend: Double,
-    val usdPlnRate: Double,
-    val withholdingTaxPaid: Double,
-    val dividendInPln: Double,
-    val taxDueInPoland: Double
+    var usdPlnRate: Double,
+    var withholdingTaxPaid: Double,
+    var dividendInPln: Double,
+    var taxDueInPoland: Double
 )
 data class CashFlowData(val date: String, val dividendsPaid: Double, val freeCashFlow: Double)
 data class LiabilitiesData(val date: String, val totalLiabilities: Double, val totalAssets: Double, val totalEquity: Double, val totalDebt: Double)

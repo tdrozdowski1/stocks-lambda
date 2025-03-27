@@ -17,16 +17,25 @@ repositories {
 }
 
 dependencies {
+    // AWS Lambda dependencies
     implementation("com.amazonaws:aws-lambda-java-core:1.2.1")
     implementation("com.amazonaws:aws-lambda-java-events:3.11.0")
+
+    // AWS SDK for DynamoDB
     implementation("software.amazon.awssdk:dynamodb:2.20.84")
+
+    // Jackson for JSON serialization/deserialization
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.0")
 
-    implementation ("org.jetbrains.kotlin:kotlin-stdlib:1.8.0")  // Ensure the version is correct
+    // Kotlin standard library
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.8.0")
 
-
-    testImplementation("org.junit.jupiter:junit-jupiter:5.9.0")  // JUnit 5
-    testImplementation("org.assertj:assertj-core:3.24.2")  // Optional: Fluent assertions
+    // Test dependencies
+    testImplementation("org.junit.jupiter:junit-jupiter:5.9.0")
+    testImplementation("org.assertj:assertj-core:3.24.2")
+    testImplementation("org.mockito:mockito-core:5.7.0") // Added for mocking
+    testImplementation("org.mockito:mockito-junit-jupiter:5.7.0") // Mockito JUnit 5 integration
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
