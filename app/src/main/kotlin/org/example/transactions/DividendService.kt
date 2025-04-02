@@ -11,6 +11,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 class DividendService(
     private val httpClient: HttpClient = HttpClient.newHttpClient(),
@@ -19,27 +20,19 @@ class DividendService(
     private val baseUrl: String = "https://financialmodelingprep.com/api/v3"
 ) {
 
-    fun filterDividendsByOwnership(
-        dividends: List<DividendDetail>,
-        ownershipPeriods: List<OwnershipPeriod>
-    ): List<DividendDetail> {
+    fun filterDividendsByOwnership(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
         return dividends.filter { dividend ->
-            val dividendDate = LocalDate.parse(dividend.recordDate)
-            ownershipPeriods.any { period ->
-                val start = LocalDate.parse(period.startDate)
-                val end = period.endDate?.let { LocalDate.parse(it) } ?: LocalDate.now()
-                dividendDate in start..end
+            try {
+                val dividendDate = LocalDate.parse(dividend.date)
+                ownershipPeriods.any { period ->
+                    val start = LocalDate.parse(period.startDate)
+                    val end = period.endDate?.let { LocalDate.parse(it) }
+                    dividendDate >= start && (end == null || dividendDate <= end)
+                }
+            } catch (e: DateTimeParseException) {
+                println("Skipping dividend with invalid date: '${dividend.date}'")
+                false // Skip invalid dates
             }
-        }.map { dividend ->
-            val period = ownershipPeriods.find { p ->
-                val start = LocalDate.parse(p.startDate)
-                val end = p.endDate?.let { LocalDate.parse(it) } ?: LocalDate.now()
-                LocalDate.parse(dividend.recordDate) in start..end
-            }
-            dividend.copy(
-                quantity = period?.quantity ?: 0.0,
-                totalDividend = dividend.dividend * (period?.quantity ?: 0.0)
-            )
         }
     }
 

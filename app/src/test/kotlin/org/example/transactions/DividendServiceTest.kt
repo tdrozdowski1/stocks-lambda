@@ -62,8 +62,8 @@ class DividendServiceTest {
                     recordDate = "2024-01-09",
                     paymentDate = "2024-01-10",
                     declarationDate = "2024-01-01",
-                    quantity = 0.0,
-                    totalDividend = 0.0,
+                    quantity = 1.0,
+                    totalDividend = 1.5,
                     usdPlnRate = 0.0,
                     withholdingTaxPaid = 0.0,
                     dividendInPln = 0.0,
@@ -77,8 +77,8 @@ class DividendServiceTest {
                     recordDate = "2024-02-09",
                     paymentDate = "2024-02-10",
                     declarationDate = "2024-02-01",
-                    quantity = 0.0,
-                    totalDividend = 0.0,
+                    quantity = 1.0,
+                    totalDividend = 2.0,
                     usdPlnRate = 0.0,
                     withholdingTaxPaid = 0.0,
                     dividendInPln = 0.0,
@@ -92,8 +92,8 @@ class DividendServiceTest {
                     recordDate = "2024-03-09",
                     paymentDate = "2024-03-10",
                     declarationDate = "2024-03-01",
-                    quantity = 0.0,
-                    totalDividend = 0.0,
+                    quantity = 1.0,
+                    totalDividend = 2.0,
                     usdPlnRate = 0.0,
                     withholdingTaxPaid = 0.0,
                     dividendInPln = 0.0,
@@ -111,9 +111,9 @@ class DividendServiceTest {
             // Then
             assertEquals(1, filteredDividends.size)
             assertEquals("2024-01-10", filteredDividends[0].paymentDate)
-            assertEquals(10.0, filteredDividends[0].quantity)
+            assertEquals(1.0, filteredDividends[0].quantity)
             assertEquals(1.5, filteredDividends[0].dividend)
-            assertEquals(15.0, filteredDividends[0].totalDividend)
+            assertEquals(1.5, filteredDividends[0].totalDividend)
         }
 
         @Test
