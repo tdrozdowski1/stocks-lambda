@@ -1,7 +1,6 @@
 package org.example.transactions
 
 import DividendDetail
-import OwnershipPeriod
 import Stock
 import Transaction
 import com.amazonaws.services.lambda.runtime.Context

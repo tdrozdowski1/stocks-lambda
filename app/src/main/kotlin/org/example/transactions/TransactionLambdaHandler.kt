@@ -30,7 +30,12 @@ class TransactionLambdaHandler(
         val method = input["httpMethod"] as? String ?: "GET"
 
         if (method == "OPTIONS") {
-            return buildCorsResponse(200, "")
+            // Handle CORS Preflight Request
+            return mapOf(
+                "statusCode" to 200,
+                "headers" to corsHeaders(),
+                "body" to ""
+            )
         }
 
         val transactionJson = input["body"] as? String
@@ -46,11 +51,7 @@ class TransactionLambdaHandler(
     private fun buildCorsResponse(statusCode: Int, body: String): Map<String, Any> {
         return mapOf(
             "statusCode" to statusCode,
-            "headers" to mapOf(
-                "Access-Control-Allow-Origin" to "https://main.d2nn1tu89v11eh.amplifyapp.com",
-                "Access-Control-Allow-Methods" to "OPTIONS,POST",
-                "Access-Control-Allow-Headers" to "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
-            ),
+            "headers" to corsHeaders(),
             "body" to body
         )
     }
@@ -181,5 +182,13 @@ class TransactionLambdaHandler(
                 taxDueInPoland = 0.0
             )
         }
+    }
+
+    private fun corsHeaders(): Map<String, String> {
+        return mapOf(
+            "Access-Control-Allow-Origin" to "https://main.d2nn1tu89v11eh.amplifyapp.com",
+            "Access-Control-Allow-Methods" to "OPTIONS, POST",
+            "Access-Control-Allow-Headers" to "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
+        )
     }
 }
