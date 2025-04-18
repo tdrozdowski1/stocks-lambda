@@ -21,23 +21,46 @@ class TransactionLambdaHandler(
     private val dividendService: DividendService = DividendService(),
     private val dbService: DbService = DbService(),
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
-) : RequestHandler<Map<String, Any>, String> {
+) : RequestHandler<Map<String, Any>, Map<String, Any>> {
 
     private val apiKey = "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D"
     private val baseUrl = "https://financialmodelingprep.com/api/v3"
 
-    override fun handleRequest(input: Map<String, Any>, context: Context): String {
-        val transactionJson = input["body"] as? String ?: return "Error: No transaction body provided"
+    override fun handleRequest(input: Map<String, Any>, context: Context): Map<String, Any> {
+        val method = input["httpMethod"] as? String ?: "GET"
+
+        if (method == "OPTIONS") {
+            return buildCorsResponse(200, "")
+        }
+
+        val transactionJson = input["body"] as? String
+            ?: return buildCorsResponse(400, "Error: No transaction body provided")
+
         val transaction = objectMapper.readValue<Transaction>(transactionJson)
-        return addTransaction(transaction)
+        val stock = addTransaction(transaction)
+        val responseBody = objectMapper.writeValueAsString(stock)
+
+        return buildCorsResponse(200, responseBody)
     }
 
-    private fun addTransaction(transaction: Transaction): String {
+    private fun buildCorsResponse(statusCode: Int, body: String): Map<String, Any> {
+        return mapOf(
+            "statusCode" to statusCode,
+            "headers" to mapOf(
+                "Access-Control-Allow-Origin" to "https://main.d2nn1tu89v11eh.amplifyapp.com",
+                "Access-Control-Allow-Methods" to "OPTIONS,POST",
+                "Access-Control-Allow-Headers" to "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+            ),
+            "body" to body
+        )
+    }
+
+    private fun addTransaction(transaction: Transaction): Stock {
         val currentStocks = dbService.getStocks()
         var stock = currentStocks.find { it.symbol == transaction.symbol }
 
         if (stock != null) {
-            val updatedTransactions: List<Transaction> = stock.transactions + listOf(transaction)
+            val updatedTransactions = stock.transactions + transaction
             stock = stock.copy(
                 transactions = updatedTransactions,
                 moneyInvested = calculateMoneyInvested(updatedTransactions),
@@ -48,35 +71,30 @@ class TransactionLambdaHandler(
                 symbol = transaction.symbol,
                 transactions = listOf(transaction),
                 moneyInvested = calculateMoneyInvested(listOf(transaction)),
-                currentPrice = emptyList(), // Will be updated below
+                currentPrice = emptyList(),
                 ownershipPeriods = calculateOwnershipPeriods(listOf(transaction)),
-                dividends = null,           // Nullable, set to null initially
-                totalDividendValue = 0.0,   // Non-nullable, default to 0.0
+                dividends = null,
+                totalDividendValue = 0.0,
                 cashFlowData = null,
                 liabilitiesData = null,
-                taxToBePaidInPoland = null, // Nullable, set to null initially
-                totalWithholdingTaxPaid = null // Nullable, set to null initially
+                taxToBePaidInPoland = null,
+                totalWithholdingTaxPaid = null
             )
         }
 
-        // Fetch current stock price
         stock = stock.copy(currentPrice = getStockPrice(stock.symbol))
 
-        // Fetch and process dividends using DividendService
         val dividendsData = getDividends(stock.symbol)
         val ownershipPeriods = calculateOwnershipPeriods(stock.transactions)
         stock.dividends = dividendService.filterDividendsByOwnership(dividendsData, ownershipPeriods)
         stock.totalDividendValue = dividendService.calculateTotalDividends(stock.dividends!!)
 
-        // Update USD/PLN rates and taxes using DividendService
         stock = dividendService.updateUsdPlnRateForDividends(stock)
         stock = dividendService.calculateTaxToBePaidInPoland(stock)
         stock = dividendService.calculateTotalWithholdingTaxPaid(stock)
 
-        // Save to DynamoDB using DbService
         dbService.updateStock(stock)
-
-        return objectMapper.writeValueAsString(stock)
+        return stock
     }
 
     private fun calculateMoneyInvested(transactions: List<Transaction>): Double {
@@ -105,11 +123,7 @@ class TransactionLambdaHandler(
                 "buy" -> {
                     if (totalAmount > 0 && startDate != null) {
                         ownershipPeriods.add(
-                            OwnershipPeriod(
-                                startDate.toString(),
-                                transactionDate.toString(),
-                                totalAmount
-                            )
+                            OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
                         )
                     }
                     totalAmount += t.amount
@@ -118,11 +132,7 @@ class TransactionLambdaHandler(
                 "sell" -> {
                     if (totalAmount > 0 && startDate != null) {
                         ownershipPeriods.add(
-                            OwnershipPeriod(
-                                startDate.toString(),
-                                transactionDate.toString(),
-                                totalAmount
-                            )
+                            OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
                         )
                         totalAmount -= t.amount
                         startDate = if (totalAmount > 0) transactionDate else null

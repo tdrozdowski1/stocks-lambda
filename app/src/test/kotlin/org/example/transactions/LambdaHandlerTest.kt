@@ -51,35 +51,35 @@ class LambdaHandlerTest {
         val input = mapOf("body" to objectMapper.writeValueAsString(transaction))
 
         // Mock DbService
-        `when`(dbService.getStocks()).thenReturn(emptyList()) // No existing stocks
+        `when`(dbService.getStocks()).thenReturn(emptyList())
 
         // Mock HttpClient for stock price
         val stockPriceResponse = """
-            [{
-                "symbol": "AAPL",
-                "name": "Apple Inc.",
-                "price": 150.0,
-                "changesPercentage": 0.0,
-                "change": 0.0,
-                "dayLow": 149.0,
-                "dayHigh": 151.0,
-                "yearHigh": 180.0,
-                "yearLow": 120.0,
-                "marketCap": 2400000000000,
-                "priceAvg50": 145.0,
-                "priceAvg200": 140.0,
-                "exchange": "NASDAQ",
-                "volume": 1000000,
-                "avgVolume": 900000,
-                "open": 149.5,
-                "previousClose": 149.0,
-                "eps": 6.0,
-                "pe": 25.0,
-                "earningsAnnouncement": "2025-04-30T00:00:00Z",
-                "sharesOutstanding": 16000000000,
-                "timestamp": 1648761600
-            }]
-            """.trimIndent()
+        [{
+            "symbol": "AAPL",
+            "name": "Apple Inc.",
+            "price": 150.0,
+            "changesPercentage": 0.0,
+            "change": 0.0,
+            "dayLow": 149.0,
+            "dayHigh": 151.0,
+            "yearHigh": 180.0,
+            "yearLow": 120.0,
+            "marketCap": 2400000000000,
+            "priceAvg50": 145.0,
+            "priceAvg200": 140.0,
+            "exchange": "NASDAQ",
+            "volume": 1000000,
+            "avgVolume": 900000,
+            "open": 149.5,
+            "previousClose": 149.0,
+            "eps": 6.0,
+            "pe": 25.0,
+            "earningsAnnouncement": "2025-04-30T00:00:00Z",
+            "sharesOutstanding": 16000000000,
+            "timestamp": 1648761600
+        }]
+    """.trimIndent()
         val stockPriceHttpResponse = mock(HttpResponse::class.java) as HttpResponse<String>
         `when`(stockPriceHttpResponse.body()).thenReturn(stockPriceResponse)
 
@@ -88,7 +88,6 @@ class LambdaHandlerTest {
         val dividendsHttpResponse = mock(HttpResponse::class.java) as HttpResponse<String>
         `when`(dividendsHttpResponse.body()).thenReturn(dividendsResponse)
 
-        // Configure HttpClient to return responses in sequence
         `when`(httpClient.send(any(HttpRequest::class.java), eq(HttpResponse.BodyHandlers.ofString())))
             .thenReturn(stockPriceHttpResponse, dividendsHttpResponse)
 
@@ -100,32 +99,26 @@ class LambdaHandlerTest {
         `when`(dividendService.calculateTaxToBePaidInPoland(any())).thenAnswer { it.arguments[0] as Stock }
         `when`(dividendService.calculateTotalWithholdingTaxPaid(any())).thenAnswer { it.arguments[0] as Stock }
 
-        // Expected Stock after processing
-        val expectedStock = Stock(
-            symbol = "AAPL",
-            transactions = listOf(transaction),
-            moneyInvested = 1505.0, // 10 * 150 + 5 commission
-            currentPrice = objectMapper.readValue(stockPriceResponse),
-            ownershipPeriods = listOf(OwnershipPeriod("2025-03-27", null, 10.0)),
-            dividends = emptyDividends,
-            totalDividendValue = 0.0,
-            cashFlowData = null,
-            liabilitiesData = null,
-            taxToBePaidInPoland = null,
-            totalWithholdingTaxPaid = null
-        )
-
         // When
         val result = transactionLambdaHandler.handleRequest(input, context)
 
-        // Then
-        val resultStock = objectMapper.readValue<Stock>(result)
-        assertEquals(expectedStock.symbol, resultStock.symbol)
-        assertEquals(expectedStock.moneyInvested, resultStock.moneyInvested, 0.001)
-        assertEquals(expectedStock.transactions.size, resultStock.transactions.size)
-        assertEquals(expectedStock.ownershipPeriods[0].quantity, resultStock.ownershipPeriods[0].quantity, 0.001)
-        assertEquals(expectedStock.totalDividendValue, resultStock.totalDividendValue, 0.001)
-        verify(dbService).updateStock(any()) // Verify stock is saved
+        // Then: Validate response structure
+        val statusCode = result["statusCode"] as Int
+        val headers = result["headers"] as Map<*, *>
+        val body = result["body"] as String
+
+        assertEquals(200, statusCode)
+        assertEquals("https://main.d2nn1tu89v11eh.amplifyapp.com", headers["Access-Control-Allow-Origin"])
+
+        val resultStock = objectMapper.readValue<Stock>(body)
+
+        assertEquals("AAPL", resultStock.symbol)
+        assertEquals(1505.0, resultStock.moneyInvested, 0.001)
+        assertEquals(1, resultStock.transactions.size)
+        assertEquals(10.0, resultStock.ownershipPeriods[0].quantity, 0.001)
+        assertEquals(0.0, resultStock.totalDividendValue, 0.001)
+
+        verify(dbService).updateStock(any())
     }
 }
 
