@@ -41,8 +41,21 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "Error: No transaction body provided")
 
-        val nestedBody = objectMapper.readTree(transactionJson).get("body").asText()
-        val transaction = objectMapper.readValue(nestedBody, Transaction::class.java)
+        val nestedBody = try {
+            objectMapper.readTree(transactionJson).get("body").asText()
+        } catch (e: Exception) {
+            context.logger.log("Invalid nested body: ${e.message}")
+            return buildCorsResponse(400, "Error: Malformed body format")
+        }
+
+        val transaction = try {
+            objectMapper.readValue(nestedBody, Transaction::class.java)
+        } catch (e: Exception) {
+            context.logger.log("Deserialization error: ${e.message}")
+            return buildCorsResponse(400, "Error: Invalid transaction format")
+        }
+
+
         val stock = addTransaction(transaction)
         val responseBody = objectMapper.writeValueAsString(stock)
 
