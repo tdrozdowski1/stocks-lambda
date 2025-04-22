@@ -41,8 +41,8 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "Error: No transaction body provided")
 
-        val cleanedBody = objectMapper.readValue(transactionJson, String::class.java)
-        val transaction = objectMapper.readValue(cleanedBody, Transaction::class.java)
+        val nestedBody = objectMapper.readTree(transactionJson).get("body").asText()
+        val transaction = objectMapper.readValue(nestedBody, Transaction::class.java)
         val stock = addTransaction(transaction)
         val responseBody = objectMapper.writeValueAsString(stock)
 
