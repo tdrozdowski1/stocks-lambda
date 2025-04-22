@@ -27,10 +27,10 @@ class TransactionLambdaHandler(
     private val baseUrl = "https://financialmodelingprep.com/api/v3"
 
     override fun handleRequest(input: Map<String, Any>, context: Context): Map<String, Any> {
-        val method = input["httpMethod"] as? String ?: "GET"
+        context.logger.log("Raw input: $input\n")
 
+        val method = input["httpMethod"] as? String ?: "GET"
         if (method == "OPTIONS") {
-            // Handle CORS Preflight Request
             return mapOf(
                 "statusCode" to 200,
                 "headers" to corsHeaders(),
@@ -41,7 +41,8 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "Error: No transaction body provided")
 
-        val transaction = objectMapper.readValue<Transaction>(transactionJson)
+        val cleanedBody = objectMapper.readValue(transactionJson, String::class.java)
+        val transaction = objectMapper.readValue(cleanedBody, Transaction::class.java)
         val stock = addTransaction(transaction)
         val responseBody = objectMapper.writeValueAsString(stock)
 
