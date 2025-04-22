@@ -52,15 +52,23 @@ class DividendService(
         return stock
     }
 
-    private fun getHistoricalExchangeRate(date: LocalDate): Double {
-        val formattedDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+    fun getHistoricalExchangeRate(date: String): Double {
+        val url = "https://api.exchangerate.host/$date?base=USD&symbols=PLN"
         val request = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/historical-price-full/USDPLN?from=$formattedDate&to=$formattedDate&apikey=$apiKey"))
+            .uri(URI.create(url))
             .GET()
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        val json = objectMapper.readTree(response.body())
-        return json["historical"][0]["close"].asDouble()
+
+        val root = objectMapper.readTree(response.body())
+
+        val rateNode = root.get("rates")?.get("PLN")
+        if (rateNode == null) {
+            println("⚠️ Missing 'rates.PLN' for date $date. Full response: ${response.body()}")
+            throw RuntimeException("Missing PLN exchange rate for date $date")
+        }
+
+        return rateNode.asDouble()
     }
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
