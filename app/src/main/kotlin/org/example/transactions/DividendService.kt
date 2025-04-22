@@ -52,20 +52,24 @@ class DividendService(
         return stock
     }
 
-    fun getHistoricalExchangeRate(date: String): Double {
-        val url = "https://api.exchangerate.host/$date?base=USD&symbols=PLN"
+    fun getHistoricalExchangeRate(date: LocalDate): Double {
+        val url = "https://api.exchangerate.host/${date}?base=USD&symbols=PLN"
         val request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .GET()
             .build()
+
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val responseBody = response.body()
 
-        val root = objectMapper.readTree(response.body())
+        println("📦 Exchange rate response for $date: $responseBody")
 
+        val root = objectMapper.readTree(responseBody)
         val rateNode = root.get("rates")?.get("PLN")
-        if (rateNode == null) {
-            println("⚠️ Missing 'rates.PLN' for date $date. Full response: ${response.body()}")
-            throw RuntimeException("Missing PLN exchange rate for date $date")
+
+        if (rateNode == null || !rateNode.isNumber) {
+            println("❌ Missing or invalid 'rates.PLN' for $date. Response: $responseBody")
+            throw RuntimeException("Missing PLN exchange rate for $date")
         }
 
         return rateNode.asDouble()
