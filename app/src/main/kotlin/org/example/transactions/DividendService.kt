@@ -3,6 +3,7 @@ package org.example.transactions
 import DividendDetail
 import OwnershipPeriod
 import Stock
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.net.URI
@@ -10,14 +11,13 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 class DividendService(
     private val httpClient: HttpClient = HttpClient.newHttpClient(),
     private val objectMapper: ObjectMapper = jacksonObjectMapper(),
-    private val apiKey: String = "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D",
-    private val baseUrl: String = "https://financialmodelingprep.com/api/v3"
+    private val API_KEY: String = "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D",
+    private val BASE_URL: String = "https://financialmodelingprep.com/api/v3"
 ) {
 
     fun filterDividendsByOwnership(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
@@ -53,7 +53,7 @@ class DividendService(
     }
 
     fun getHistoricalExchangeRate(date: LocalDate): Double {
-        val url = "https://api.exchangerate.host/${date}?base=USD&symbols=PLN"
+        val url = "$BASE_URL/historical-price-full/USDPLN?apikey=$API_KEY"
         val request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .GET()
@@ -62,17 +62,35 @@ class DividendService(
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         val responseBody = response.body()
 
-        println("📦 Exchange rate response for $date: $responseBody")
+        println("📦 Historical Exchange Rate API Response for $date: $responseBody")
 
         val root = objectMapper.readTree(responseBody)
-        val rateNode = root.get("rates")?.get("PLN")
+        val historical = root.get("historical") ?: throw RuntimeException("Missing 'historical' field in response")
 
-        if (rateNode == null || !rateNode.isNumber) {
-            println("❌ Missing or invalid 'rates.PLN' for $date. Response: $responseBody")
-            throw RuntimeException("Missing PLN exchange rate for $date")
+        return findRateByDate(historical, date) ?: throw RuntimeException("No exchange rate found for $date or previous days")
+    }
+
+    private fun findRateByDate(historical: JsonNode, date: LocalDate, maxRetries: Int = 5): Double? {
+        var currentDate = date
+        var attempts = 0
+
+        while (attempts <= maxRetries) {
+            val match = historical.find { it.get("date")?.asText() == currentDate.toString() }
+            if (match != null) {
+                val closeNode = match.get("close")
+                if (closeNode != null && closeNode.isNumber) {
+                    println("✅ Found USD/PLN rate for $currentDate: ${closeNode.asDouble()}")
+                    return closeNode.asDouble()
+                }
+            }
+
+            // Go to previous day
+            currentDate = currentDate.minusDays(1)
+            attempts++
         }
 
-        return rateNode.asDouble()
+        println("⚠️ No USD/PLN exchange rate found after $maxRetries retries starting from $date")
+        return null
     }
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
