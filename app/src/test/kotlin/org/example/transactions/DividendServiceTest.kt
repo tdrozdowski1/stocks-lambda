@@ -22,18 +22,15 @@ class DividendServiceTest {
     private lateinit var httpClient: HttpClient
     private lateinit var objectMapper: ObjectMapper
 
-    // Mock Financial Data Service response for USD/PLN rates
-    private val mockExchangeRateResponse = """
-        {
-          "historical": [
-            {"date": "2023-12-01", "close": 4.5},
-            {"date": "2023-11-30", "close": 4.4},
-            {"date": "2023-11-01", "close": 4.2},
-            {"date": "2023-10-31", "close": 4.1},
-            {"date": "2022-10-30", "close": 4.0}
-          ]
-        }
-    """.trimIndent()
+    // Mock exchange rates for specific dates
+    private val exchangeRates = mapOf(
+        "2023-11-30" to 4.4,
+        "2023-10-31" to 4.1,
+        "2022-10-31" to 4.0,
+        "2022-11-01" to 4.05, // Added to handle fallback query
+        "2023-12-01" to 4.5,
+        "2023-11-01" to 4.2
+    )
 
     @BeforeEach
     fun setUp() {
@@ -41,18 +38,31 @@ class DividendServiceTest {
         objectMapper = jacksonObjectMapper()
         dividendService = DividendService(httpClient, objectMapper)
 
-        // Mock HTTP response for exchange rate requests
-        val mockResponse = mock(HttpResponse::class.java) as HttpResponse<String>
-        `when`(mockResponse.body()).thenReturn(mockExchangeRateResponse)
+        // Mock HTTP response for exchange rate requests based on queried date
         `when`(httpClient.send(any<HttpRequest>(), any<HttpResponse.BodyHandler<String>>()))
-            .thenReturn(mockResponse)
+            .thenAnswer { invocation ->
+                val request = invocation.getArgument<HttpRequest>(0)
+                val uri = request.uri().toString()
+                val date = uri.substringAfter("from=").substringBefore("&")
+                val rate = exchangeRates[date] ?: throw RuntimeException("No rate for $date")
+                val responseBody = """
+                    {
+                      "historical": [
+                        {"date": "$date", "close": $rate}
+                      ]
+                    }
+                """.trimIndent()
+                val mockResponse = mock(HttpResponse::class.java)
+                @Suppress("UNCHECKED_CAST")
+                `when`(mockResponse.body()).thenReturn(responseBody)
+                mockResponse as HttpResponse<String>
+            }
     }
 
     @Nested
     inner class FilterDividendsByOwnershipTests {
         @Test
         fun `should filter dividends based on ownership periods`() {
-            // Given
             val dividends = listOf(
                 DividendDetail(
                     date = "2024-01-10",
@@ -105,10 +115,8 @@ class DividendServiceTest {
                 OwnershipPeriod(startDate = "2024-01-15", endDate = "2024-02-01", quantity = 5.0)
             )
 
-            // When
             val filteredDividends = dividendService.filterDividendsByOwnership(dividends, ownershipPeriods)
 
-            // Then
             assertEquals(1, filteredDividends.size)
             assertEquals("2024-01-10", filteredDividends[0].paymentDate)
             assertEquals(1.0, filteredDividends[0].quantity)
@@ -118,7 +126,6 @@ class DividendServiceTest {
 
         @Test
         fun `should return empty list if no relevant dividends`() {
-            // Given
             val dividends = listOf(
                 DividendDetail(
                     date = "2024-04-10",
@@ -140,10 +147,8 @@ class DividendServiceTest {
                 OwnershipPeriod(startDate = "2024-01-01", endDate = "2024-01-15", quantity = 10.0)
             )
 
-            // When
             val filteredDividends = dividendService.filterDividendsByOwnership(dividends, ownershipPeriods)
 
-            // Then
             assertEquals(0, filteredDividends.size)
         }
     }
@@ -152,7 +157,6 @@ class DividendServiceTest {
     inner class CalculateTotalDividendsTests {
         @Test
         fun `should correctly calculate total dividends for multiple entries`() {
-            // Given
             val relevantDividends = listOf(
                 DividendDetail(
                     date = "2024-01-01",
@@ -186,10 +190,8 @@ class DividendServiceTest {
                 )
             )
 
-            // When
             val result = dividendService.calculateTotalDividends(relevantDividends)
 
-            // Then
             assertEquals(350.0, result, 0.001)
         }
     }
@@ -198,7 +200,6 @@ class DividendServiceTest {
     inner class UpdateUsdPlnRateForDividendsTests {
         @Test
         fun `should update dividends with USD-PLN rate and calculated values`() {
-            // Given
             val stock = Stock(
                 symbol = "AAPL",
                 moneyInvested = 1000.0,
@@ -269,10 +270,8 @@ class DividendServiceTest {
                 taxToBePaidInPoland = null
             )
 
-            // When
             val updatedStock = dividendService.updateUsdPlnRateForDividends(stock)
 
-            // Then
             val dividends = updatedStock.dividends!!
             assertEquals(2, dividends.size)
 
@@ -280,22 +279,21 @@ class DividendServiceTest {
                 assertEquals("2023-12-01", paymentDate)
                 assertEquals(4.4, usdPlnRate, 0.001)
                 assertEquals(15.0, withholdingTaxPaid, 0.001)
-                assertEquals(440.00000000000006, dividendInPln, 0.001)
-                assertEquals(17.60000000000001, taxDueInPoland, 0.001)
+                assertEquals(440.0, dividendInPln, 0.001)
+                assertEquals(17.6, taxDueInPoland, 0.001)
             }
 
             with(dividends[1]) { // 2023-11-01 (uses 2023-10-31 rate: 4.1)
                 assertEquals("2023-11-01", paymentDate)
                 assertEquals(4.1, usdPlnRate, 0.001)
                 assertEquals(30.0, withholdingTaxPaid, 0.001)
-                assertEquals(819.9999999999999, dividendInPln, 0.001)
+                assertEquals(820.0, dividendInPln, 0.001)
                 assertEquals(32.8, taxDueInPoland, 0.001)
             }
         }
 
         @Test
         fun `should use rate from day earlier if no rate for payment day`() {
-            // Given
             val stock = Stock(
                 symbol = "AAPL",
                 moneyInvested = 1000.0,
@@ -351,20 +349,17 @@ class DividendServiceTest {
                 taxToBePaidInPoland = null
             )
 
-            // When
             val updatedStock = dividendService.updateUsdPlnRateForDividends(stock)
 
-            // Then
             val dividend = updatedStock.dividends!![0]
             assertEquals(4.4, dividend.usdPlnRate, 0.001) // Uses 2023-11-30 rate
             assertEquals(15.0, dividend.withholdingTaxPaid, 0.001)
-            assertEquals(440.00000000000006, dividend.dividendInPln, 0.001)
-            assertEquals(17.60000000000001, dividend.taxDueInPoland, 0.001)
+            assertEquals(440.0, dividend.dividendInPln, 0.001)
+            assertEquals(17.6, dividend.taxDueInPoland, 0.001)
         }
 
         @Test
         fun `should use rate from two days earlier if needed`() {
-            // Given
             val stock = Stock(
                 symbol = "AAPL",
                 moneyInvested = 1000.0,
@@ -420,10 +415,8 @@ class DividendServiceTest {
                 taxToBePaidInPoland = null
             )
 
-            // When
             val updatedStock = dividendService.updateUsdPlnRateForDividends(stock)
 
-            // Then
             val dividend = updatedStock.dividends!![0]
             assertEquals(4.0, dividend.usdPlnRate, 0.001) // Uses 2022-10-31 rate
             assertEquals(15.0, dividend.withholdingTaxPaid, 0.001)
@@ -436,7 +429,6 @@ class DividendServiceTest {
     inner class CalculateTaxesTests {
         @Test
         fun `should calculate tax to be paid in Poland`() {
-            // Given
             val stock = Stock(
                 symbol = "AAPL",
                 moneyInvested = 1000.0,
@@ -507,16 +499,13 @@ class DividendServiceTest {
                 taxToBePaidInPoland = null
             )
 
-            // When
             val updatedStock = dividendService.calculateTaxToBePaidInPoland(stock)
 
-            // Then
             updatedStock.taxToBePaidInPoland?.let { assertEquals(35.0, it, 0.001) } // (10 * 2) + (5 * 3)
         }
 
         @Test
         fun `should calculate total withholding tax paid`() {
-            // Given
             val stock = Stock(
                 symbol = "AAPL",
                 moneyInvested = 1000.0,
@@ -587,10 +576,8 @@ class DividendServiceTest {
                 taxToBePaidInPoland = null
             )
 
-            // When
             val updatedStock = dividendService.calculateTotalWithholdingTaxPaid(stock)
 
-            // Then
             updatedStock.totalWithholdingTaxPaid?.let { assertEquals(9.0, it, 0.001) } // (1.5 * 2) + (2 * 3)
         }
     }

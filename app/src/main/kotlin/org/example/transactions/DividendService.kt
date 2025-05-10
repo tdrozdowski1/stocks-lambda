@@ -52,8 +52,12 @@ class DividendService(
         return stock
     }
 
-    fun getHistoricalExchangeRate(date: LocalDate): Double {
-        val url = "$BASE_URL/historical-price-full/USDPLN?apikey=$API_KEY"
+fun getHistoricalExchangeRate(date: LocalDate, maxRetries: Int = 5): Double {
+    var currentDate = date
+    var attempts = 0
+
+    while (attempts <= maxRetries) {
+        val url = "$BASE_URL/historical-price-full/USDPLN?from=${currentDate}&to=${currentDate}&apikey=$API_KEY"
         val request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .GET()
@@ -62,36 +66,25 @@ class DividendService(
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         val responseBody = response.body()
 
-        println("📦 Historical Exchange Rate API Response for $date: $responseBody")
+        println("📦 Exchange Rate API Response for $currentDate: $responseBody")
 
         val root = objectMapper.readTree(responseBody)
-        val historical = root.get("historical") ?: throw RuntimeException("Missing 'historical' field in response")
+        val historical = root.get("historical")
 
-        return findRateByDate(historical, date) ?: throw RuntimeException("No exchange rate found for $date or previous days")
-    }
-
-    private fun findRateByDate(historical: JsonNode, date: LocalDate, maxRetries: Int = 5): Double? {
-        var currentDate = date
-        var attempts = 0
-
-        while (attempts <= maxRetries) {
-            val match = historical.find { it.get("date")?.asText() == currentDate.toString() }
-            if (match != null) {
-                val closeNode = match.get("close")
-                if (closeNode != null && closeNode.isNumber) {
-                    println("✅ Found USD/PLN rate for $currentDate: ${closeNode.asDouble()}")
-                    return closeNode.asDouble()
-                }
+        if (historical != null && historical.isArray && historical.size() > 0) {
+            val rate = historical[0].get("close")?.asDouble()
+            if (rate != null) {
+                println("✅ Found USD/PLN rate for $currentDate: $rate")
+                return rate
             }
-
-            // Go to previous day
-            currentDate = currentDate.minusDays(1)
-            attempts++
         }
 
-        println("⚠️ No USD/PLN exchange rate found after $maxRetries retries starting from $date")
-        return null
+        currentDate = currentDate.minusDays(1)
+        attempts++
     }
+
+    throw RuntimeException("⚠️ No USD/PLN exchange rate found after $maxRetries retries starting from $date")
+}
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
         stock.taxToBePaidInPoland = stock.dividends?.sumOf { it.taxDueInPoland * it.quantity } ?: 0.0
