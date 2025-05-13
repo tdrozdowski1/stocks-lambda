@@ -32,6 +32,9 @@ class LambdaHandlerTest {
         objectMapper = jacksonObjectMapper()
         context = mock(Context::class.java)
 
+        val lambdaLogger = mock(com.amazonaws.services.lambda.runtime.LambdaLogger::class.java)
+        `when`(context.logger).thenReturn(lambdaLogger)
+
         // Instantiate TransactionLambdaHandler with mocked dependencies
         transactionLambdaHandler = TransactionLambdaHandler(httpClient, dividendService, dbService, objectMapper)
     }
