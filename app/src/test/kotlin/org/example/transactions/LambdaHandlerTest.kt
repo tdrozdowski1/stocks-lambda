@@ -1,126 +1,150 @@
-package org.example.transactions
+package com.example
 
+import CurrentPriceData
 import DividendDetail
 import Stock
-import Transaction
 import com.amazonaws.services.lambda.runtime.Context
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.amazonaws.services.lambda.runtime.LambdaLogger
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.*
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
+import software.amazon.awssdk.services.dynamodb.model.PutItemResponse
 
-class LambdaHandlerTest {
+class LambdaHandlerIntegrationTest {
 
-    private lateinit var transactionLambdaHandler: TransactionLambdaHandler
-    private lateinit var httpClient: HttpClient
-    private lateinit var dividendService: DividendService
-    private lateinit var dbService: DbService
-    private lateinit var objectMapper: ObjectMapper
+    private lateinit var lambdaHandler: LambdaHandler
+    private lateinit var dynamoDbClient: DynamoDbClient
     private lateinit var context: Context
+    private val objectMapper = jacksonObjectMapper()
 
     @BeforeEach
     fun setUp() {
-        httpClient = mock(HttpClient::class.java)
-        dividendService = mock(DividendService::class.java)
-        dbService = mock(DbService::class.java)
-        objectMapper = jacksonObjectMapper()
+        // Mock DynamoDbClient
+        dynamoDbClient = mock(DynamoDbClient::class.java)
+
+        // Mock Context and Logger
         context = mock(Context::class.java)
+        val logger = mock(LambdaLogger::class.java)
+        `when`(context.logger).thenReturn(logger)
 
-        val lambdaLogger = mock(com.amazonaws.services.lambda.runtime.LambdaLogger::class.java)
-        `when`(context.logger).thenReturn(lambdaLogger)
-
-        // Instantiate TransactionLambdaHandler with mocked dependencies
-        transactionLambdaHandler = TransactionLambdaHandler(httpClient, dividendService, dbService, objectMapper)
+        // Inject mocked DynamoDbClient into LambdaHandler
+        lambdaHandler = LambdaHandler(dynamoDbClient)
     }
 
     @Test
-    fun `should process a buy transaction and return stock JSON`() {
+    fun `should handle valid stock request and save to DynamoDB`() {
         // Given
-        val transaction = Transaction(
+        val stock = Stock(
             symbol = "AAPL",
-            type = "buy",
-            amount = 10.0,
-            price = 150.0,
-            commission = 5.0,
-            date = "2025-03-27"
+            moneyInvested = 1000.0,
+            currentPrice = listOf(
+                CurrentPriceData(
+                    symbol = "AAPL",
+                    name = "Apple Inc.",
+                    price = 150.0,
+                    changesPercentage = 0.0,
+                    change = 0.0,
+                    dayLow = 0.0,
+                    dayHigh = 0.0,
+                    yearHigh = 0.0,
+                    yearLow = 0.0,
+                    marketCap = 0L,
+                    priceAvg50 = 0.0,
+                    priceAvg200 = 0.0,
+                    exchange = "",
+                    volume = 0L,
+                    avgVolume = 0L,
+                    open = 0.0,
+                    previousClose = 0.0,
+                    eps = 0.0,
+                    pe = 0.0,
+                    earningsAnnouncement = "",
+                    sharesOutstanding = 0L,
+                    timestamp = 0L
+                )
+            ),
+            ownershipPeriods = emptyList(),
+            transactions = emptyList(),
+            dividends = listOf(
+                DividendDetail(
+                    date = "2023-12-01",
+                    label = "Dec Dividend",
+                    adjDividend = 100.0,
+                    dividend = 100.0,
+                    recordDate = "2023-11-30",
+                    paymentDate = "2023-12-01",
+                    declarationDate = "2023-11-25",
+                    quantity = 10.0,
+                    totalDividend = 0.0,
+                    usdPlnRate = 0.0,
+                    withholdingTaxPaid = 0.0,
+                    dividendInPln = 0.0,
+                    taxDueInPoland = 0.0
+                ),
+                DividendDetail(
+                    date = "2023-11-01",
+                    label = "Nov Dividend",
+                    adjDividend = 200.0,
+                    dividend = 200.0,
+                    recordDate = "2023-10-31",
+                    paymentDate = "2023-11-01",
+                    declarationDate = "2023-10-25",
+                    quantity = 5.0,
+                    totalDividend = 0.0,
+                    usdPlnRate = 0.0,
+                    withholdingTaxPaid = 0.0,
+                    dividendInPln = 0.0,
+                    taxDueInPoland = 0.0
+                )
+            ),
+            totalDividendValue = 0.0,
+            cashFlowData = null,
+            liabilitiesData = null,
+            totalWithholdingTaxPaid = null,
+            taxToBePaidInPoland = null
         )
-        val input = mapOf("body" to objectMapper.writeValueAsString(transaction))
 
-        // Mock DbService
-        `when`(dbService.getStocks()).thenReturn(emptyList())
+        val event = mapOf(
+            "httpMethod" to "POST",
+            "body" to objectMapper.writeValueAsString(stock)
+        )
 
-        // Mock HttpClient for stock price
-        val stockPriceResponse = """
-        [{
-            "symbol": "AAPL",
-            "name": "Apple Inc.",
-            "price": 150.0,
-            "changesPercentage": 0.0,
-            "change": 0.0,
-            "dayLow": 149.0,
-            "dayHigh": 151.0,
-            "yearHigh": 180.0,
-            "yearLow": 120.0,
-            "marketCap": 2400000000000,
-            "priceAvg50": 145.0,
-            "priceAvg200": 140.0,
-            "exchange": "NASDAQ",
-            "volume": 1000000,
-            "avgVolume": 900000,
-            "open": 149.5,
-            "previousClose": 149.0,
-            "eps": 6.0,
-            "pe": 25.0,
-            "earningsAnnouncement": "2025-04-30T00:00:00Z",
-            "sharesOutstanding": 16000000000,
-            "timestamp": 1648761600
-        }]
-    """.trimIndent()
-        val stockPriceHttpResponse = mock(HttpResponse::class.java) as HttpResponse<String>
-        `when`(stockPriceHttpResponse.body()).thenReturn(stockPriceResponse)
-
-        // Mock HttpClient for dividends
-        val dividendsResponse = """{"historical": []}"""
-        val dividendsHttpResponse = mock(HttpResponse::class.java) as HttpResponse<String>
-        `when`(dividendsHttpResponse.body()).thenReturn(dividendsResponse)
-
-        `when`(httpClient.send(any(HttpRequest::class.java), eq(HttpResponse.BodyHandlers.ofString())))
-            .thenReturn(stockPriceHttpResponse, dividendsHttpResponse)
-
-        // Mock DividendService
-        val emptyDividends = emptyList<DividendDetail>()
-        `when`(dividendService.filterDividendsByOwnership(anyList(), anyList())).thenReturn(emptyDividends)
-        `when`(dividendService.calculateTotalDividends(emptyDividends)).thenReturn(0.0)
-        `when`(dividendService.updateUsdPlnRateForDividends(any())).thenAnswer { it.arguments[0] as Stock }
-        `when`(dividendService.calculateTaxToBePaidInPoland(any())).thenAnswer { it.arguments[0] as Stock }
-        `when`(dividendService.calculateTotalWithholdingTaxPaid(any())).thenAnswer { it.arguments[0] as Stock }
+        // Mock DynamoDB response
+        `when`(dynamoDbClient.putItem(any(PutItemRequest::class.java))).thenReturn(PutItemResponse.builder().build())
 
         // When
-        val result = transactionLambdaHandler.handleRequest(input, context)
+        val response = lambdaHandler.handleRequest(event, context)
 
-        // Then: Validate response structure
-        val statusCode = result["statusCode"] as Int
-        val headers = result["headers"] as Map<*, *>
-        val body = result["body"] as String
+        // Then
+        assertEquals(200, response["statusCode"])
+        val responseBody = objectMapper.readValue<Map<String, Any>>(response["body"] as String)
+        assertEquals("Stock saved successfully", responseBody["message"])
+        assertEquals("AAPL", responseBody["stock"])
 
-        assertEquals(200, statusCode)
-        assertEquals("https://main.d2nn1tu89v11eh.amplifyapp.com", headers["Access-Control-Allow-Origin"])
+        // Verify DynamoDB interaction
+        verify(dynamoDbClient).putItem(any(PutItemRequest::class.java))
+    }
 
-        val resultStock = objectMapper.readValue<Stock>(body)
+    @Test
+    fun `should return error for invalid stock data`() {
+        // Given
+        val event = mapOf(
+            "httpMethod" to "POST",
+            "body" to "invalid-json"
+        )
 
-        assertEquals("AAPL", resultStock.symbol)
-        assertEquals(1505.0, resultStock.moneyInvested, 0.001)
-        assertEquals(1, resultStock.transactions.size)
-        assertEquals(10.0, resultStock.ownershipPeriods[0].quantity, 0.001)
-        assertEquals(0.0, resultStock.totalDividendValue, 0.001)
+        // When
+        val response = lambdaHandler.handleRequest(event, context)
 
-        verify(dbService).updateStock(any())
+        // Then
+        assertEquals(400, response["statusCode"])
+        val responseBody = objectMapper.readValue<Map<String, Any>>(response["body"] as String)
+        assertEquals("Invalid stock data", responseBody["error"])
     }
 }
 

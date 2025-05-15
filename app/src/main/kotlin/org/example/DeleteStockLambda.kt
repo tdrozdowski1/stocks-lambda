@@ -6,51 +6,6 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 
-
-// Stock data class (unchanged, assuming it’s correct)
-data class Stock(
-    val symbol: String,
-    val moneyInvested: Double,
-    val currentPrice: List<CurrentPriceData>,
-    val ownershipPeriods: List<OwnershipPeriod>,
-    val transactions: List<Transaction>,
-    val dividends: List<DividendDetail>?,
-    val totalDividendValue: Double,
-    val cashFlowData: List<CashFlowData>?,
-    val liabilitiesData: List<LiabilitiesData>?,
-    val totalWithholdingTaxPaid: Double?,
-    val taxToBePaidInPoland: Double?
-)
-
-// Define data classes with at least one primary constructor parameter
-data class CurrentPriceData(
-    val symbol: String // Example field; add others as needed
-)
-
-data class OwnershipPeriod(
-    val startDate: String // Example field; add others as needed
-)
-
-data class Transaction(
-    val symbol: String // Example field; add others as needed
-)
-
-data class DividendDetail(
-    val date: String // Example field; add others as needed
-)
-
-data class CashFlowData(
-    val date: String // Example field; add others as needed
-)
-
-data class LiabilitiesData(
-    val date: String // Example field; add others as needed
-)
-
-data class DeleteStockRequest(
-    val symbol: String
-)
-
 class DeleteStockLambdaHandler : RequestHandler<Map<String, Any>, Map<String, Any>> {
     private val dynamoDbClient = DynamoDbClient.create()
     private val objectMapper = jacksonObjectMapper()

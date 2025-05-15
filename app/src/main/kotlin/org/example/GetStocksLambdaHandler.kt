@@ -1,6 +1,13 @@
 // GetStocksLambda.kt
 package com.example
 
+import CashFlowData
+import CurrentPriceData
+import DividendDetail
+import LiabilitiesData
+import OwnershipPeriod
+import Stock
+import Transaction
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient

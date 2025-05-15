@@ -1,5 +1,6 @@
 package com.example
 
+import Stock
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
@@ -8,8 +9,10 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 
-class LambdaHandler : RequestHandler<Map<String, Any>, Map<String, Any>> {
-    private val dynamoDbClient = DynamoDbClient.create()
+class LambdaHandler(
+    private val dynamoDbClient: DynamoDbClient = DynamoDbClient.create() // Default to real client
+) : RequestHandler<Map<String, Any>, Map<String, Any>> {
+
     private val objectMapper = jacksonObjectMapper()
 
     override fun handleRequest(event: Map<String, Any>, context: Context): Map<String, Any> {
