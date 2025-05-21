@@ -1,152 +1,94 @@
-package com.example
+package org.example.transactions
 
-import CurrentPriceData
 import DividendDetail
-import Stock
-import com.amazonaws.services.lambda.runtime.Context
-import com.amazonaws.services.lambda.runtime.LambdaLogger
+import OwnershipPeriod
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
+import org.mockito.ArgumentMatchers.any
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
-import software.amazon.awssdk.services.dynamodb.model.PutItemResponse
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
+import java.math.BigDecimal
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 
-class LambdaHandlerIntegrationTest {
+class LambdaHandlerTest {
 
-    private lateinit var lambdaHandler: LambdaHandler
-    private lateinit var dynamoDbClient: DynamoDbClient
-    private lateinit var context: Context
-    private val objectMapper = jacksonObjectMapper()
+    private lateinit var dividendService: DividendService
+    private lateinit var httpClient: HttpClient
+    private lateinit var objectMapper: ObjectMapper
+
+    private val exchangeRates = mapOf(
+        "2023-11-30" to BigDecimal("4.4"),
+        "2023-10-31" to BigDecimal("4.1"),
+        "2022-10-31" to BigDecimal("4.0"),
+        "2022-11-01" to BigDecimal("4.05"),
+        "2023-12-01" to BigDecimal("4.5"),
+        "2023-11-01" to BigDecimal("4.2")
+    )
 
     @BeforeEach
     fun setUp() {
-        // Mock DynamoDbClient
-        dynamoDbClient = mock(DynamoDbClient::class.java)
+        httpClient = mock(HttpClient::class.java)
+        objectMapper = jacksonObjectMapper()
+        dividendService = DividendService(httpClient, objectMapper)
 
-        // Mock Context and Logger
-        context = mock(Context::class.java)
-        val logger = mock(LambdaLogger::class.java)
-        `when`(context.logger).thenReturn(logger)
-
-        // Inject mocked DynamoDbClient into LambdaHandler
-        lambdaHandler = LambdaHandler(dynamoDbClient)
+        `when`(httpClient.send(any<HttpRequest>(), any<HttpResponse.BodyHandler<String>>()))
+            .thenAnswer { invocation ->
+                val request = invocation.getArgument<HttpRequest>(0)
+                val uri = request.uri().toString()
+                val date = uri.substringAfter("from=").substringBefore("&")
+                val rate = exchangeRates[date] ?: throw RuntimeException("No rate for $date")
+                val responseBody = """
+                    {
+                      "historical": [
+                        {"date": "$date", "close": $rate}
+                      ]
+                    }
+                """.trimIndent()
+                val mockResponse = mock(HttpResponse::class.java)
+                @Suppress("UNCHECKED_CAST")
+                `when`(mockResponse.body()).thenReturn(responseBody)
+                mockResponse as HttpResponse<String>
+            }
     }
 
-    @Test
-    fun `should handle valid stock request and save to DynamoDB`() {
-        // Given
-        val stock = Stock(
-            symbol = "AAPL",
-            moneyInvested = 1000.0,
-            currentPrice = listOf(
-                CurrentPriceData(
-                    symbol = "AAPL",
-                    name = "Apple Inc.",
-                    price = 150.0,
-                    changesPercentage = 0.0,
-                    change = 0.0,
-                    dayLow = 0.0,
-                    dayHigh = 0.0,
-                    yearHigh = 0.0,
-                    yearLow = 0.0,
-                    marketCap = 0L,
-                    priceAvg50 = 0.0,
-                    priceAvg200 = 0.0,
-                    exchange = "",
-                    volume = 0L,
-                    avgVolume = 0L,
-                    open = 0.0,
-                    previousClose = 0.0,
-                    eps = 0.0,
-                    pe = 0.0,
-                    earningsAnnouncement = "",
-                    sharesOutstanding = 0L,
-                    timestamp = 0L
-                )
-            ),
-            ownershipPeriods = emptyList(),
-            transactions = emptyList(),
-            dividends = listOf(
+    @Nested
+    inner class FilterDividendsByOwnershipTests {
+        @Test
+        fun `should filter dividends based on ownership periods`() {
+            val dividends = listOf(
                 DividendDetail(
-                    date = "2023-12-01",
-                    label = "Dec Dividend",
-                    adjDividend = 100.0,
-                    dividend = 100.0,
-                    recordDate = "2023-11-30",
-                    paymentDate = "2023-12-01",
-                    declarationDate = "2023-11-25",
-                    quantity = 10.0,
-                    totalDividend = 0.0,
-                    usdPlnRate = 0.0,
-                    withholdingTaxPaid = 0.0,
-                    dividendInPln = 0.0,
-                    taxDueInPoland = 0.0
-                ),
-                DividendDetail(
-                    date = "2023-11-01",
-                    label = "Nov Dividend",
-                    adjDividend = 200.0,
-                    dividend = 200.0,
-                    recordDate = "2023-10-31",
-                    paymentDate = "2023-11-01",
-                    declarationDate = "2023-10-25",
-                    quantity = 5.0,
-                    totalDividend = 0.0,
-                    usdPlnRate = 0.0,
-                    withholdingTaxPaid = 0.0,
-                    dividendInPln = 0.0,
-                    taxDueInPoland = 0.0
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.5"),
+                    dividend = BigDecimal("1.5"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    quantity = BigDecimal("1.0"),
+                    totalDividend = BigDecimal("1.5"),
+                    usdPlnRate = BigDecimal.ZERO,
+                    withholdingTaxPaid = BigDecimal.ZERO,
+                    dividendInPln = BigDecimal.ZERO,
+                    taxDueInPoland = BigDecimal.ZERO
                 )
-            ),
-            totalDividendValue = 0.0,
-            cashFlowData = null,
-            liabilitiesData = null,
-            totalWithholdingTaxPaid = null,
-            taxToBePaidInPoland = null
-        )
+            )
+            val ownershipPeriods = listOf(
+                OwnershipPeriod(startDate = "2024-01-01", endDate = "2024-01-15", quantity = BigDecimal("10.0"))
+            )
 
-        val event = mapOf(
-            "httpMethod" to "POST",
-            "body" to objectMapper.writeValueAsString(stock)
-        )
+            val filteredDividends = dividendService.filterDividendsByOwnership(dividends, ownershipPeriods)
 
-        // Mock DynamoDB response
-        `when`(dynamoDbClient.putItem(any(PutItemRequest::class.java))).thenReturn(PutItemResponse.builder().build())
-
-        // When
-        val response = lambdaHandler.handleRequest(event, context)
-
-        // Then
-        assertEquals(200, response["statusCode"])
-        val responseBody = objectMapper.readValue<Map<String, Any>>(response["body"] as String)
-        assertEquals("Stock saved successfully", responseBody["message"])
-        assertEquals("AAPL", responseBody["stock"])
-
-        // Verify DynamoDB interaction
-        verify(dynamoDbClient).putItem(any(PutItemRequest::class.java))
-    }
-
-    @Test
-    fun `should return error for invalid stock data`() {
-        // Given
-        val event = mapOf(
-            "httpMethod" to "POST",
-            "body" to "invalid-json"
-        )
-
-        // When
-        val response = lambdaHandler.handleRequest(event, context)
-
-        // Then
-        assertEquals(400, response["statusCode"])
-        val responseBody = objectMapper.readValue<Map<String, Any>>(response["body"] as String)
-        assertEquals("Invalid stock data", responseBody["error"])
+            assertEquals(1, filteredDividends.size)
+            assertEquals("2024-01-10", filteredDividends[0].paymentDate)
+            assertEquals(BigDecimal("1.0"), filteredDividends[0].quantity)
+            assertEquals(BigDecimal("1.5"), filteredDividends[0].dividend)
+            assertEquals(BigDecimal("1.5"), filteredDividends[0].totalDividend)
+        }
     }
 }
-
-// Mockito helper to mock any type
-private inline fun <reified T> any(): T = org.mockito.Mockito.any(T::class.java)

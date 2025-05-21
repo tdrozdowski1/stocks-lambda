@@ -10,6 +10,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import java.math.BigDecimal
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -89,7 +90,7 @@ class TransactionLambdaHandler(
                 currentPrice = emptyList(),
                 ownershipPeriods = calculateOwnershipPeriods(listOf(transaction)),
                 dividends = null,
-                totalDividendValue = 0.0,
+                totalDividendValue = BigDecimal.ZERO,
                 cashFlowData = null,
                 liabilitiesData = null,
                 taxToBePaidInPoland = null,
@@ -112,51 +113,51 @@ class TransactionLambdaHandler(
         return stock
     }
 
-    private fun calculateMoneyInvested(transactions: List<Transaction>): Double {
-        var totalBuy = 0.0
-        var totalSell = 0.0
-        var commission = 0.0
+    private fun calculateMoneyInvested(transactions: List<Transaction>): BigDecimal {
+        var totalBuy = BigDecimal.ZERO
+        var totalSell = BigDecimal.ZERO
+        var commission = BigDecimal.ZERO
 
         transactions.forEach { t ->
-            commission += t.commission
+            commission = commission.add(t.commission)
             when (t.type) {
-                "buy" -> totalBuy += t.amount * t.price
-                "sell" -> totalSell += t.amount * t.price
+                "buy" -> totalBuy = totalBuy.add(t.amount.multiply(t.price))
+                "sell" -> totalSell = totalSell.add(t.amount.multiply(t.price))
             }
         }
-        return totalBuy - totalSell + commission
+        return totalBuy.subtract(totalSell).add(commission)
     }
 
     private fun calculateOwnershipPeriods(transactions: List<Transaction>): List<OwnershipPeriod> {
         val ownershipPeriods = mutableListOf<OwnershipPeriod>()
-        var totalAmount = 0.0
+        var totalAmount = BigDecimal.ZERO
         var startDate: LocalDate? = null
 
         transactions.forEach { t ->
             val transactionDate = LocalDate.parse(t.date)
             when (t.type) {
                 "buy" -> {
-                    if (totalAmount > 0 && startDate != null) {
+                    if (totalAmount > BigDecimal.ZERO && startDate != null) {
                         ownershipPeriods.add(
                             OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
                         )
                     }
-                    totalAmount += t.amount
+                    totalAmount = totalAmount.add(t.amount)
                     startDate = transactionDate
                 }
                 "sell" -> {
-                    if (totalAmount > 0 && startDate != null) {
+                    if (totalAmount > BigDecimal.ZERO && startDate != null) {
                         ownershipPeriods.add(
                             OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
                         )
-                        totalAmount -= t.amount
-                        startDate = if (totalAmount > 0) transactionDate else null
+                        totalAmount = totalAmount.subtract(t.amount)
+                        startDate = if (totalAmount > BigDecimal.ZERO) transactionDate else null
                     }
                 }
             }
         }
 
-        if (totalAmount > 0 && startDate != null) {
+        if (totalAmount > BigDecimal.ZERO && startDate != null) {
             ownershipPeriods.add(OwnershipPeriod(startDate.toString(), null, totalAmount))
         }
 
@@ -183,17 +184,17 @@ class TransactionLambdaHandler(
             DividendDetail(
                 date = it["date"].asText(),
                 label = it["label"].asText(),
-                adjDividend = it["adjDividend"].asDouble(),
-                dividend = it["dividend"].asDouble(),
+                adjDividend = it["adjDividend"].decimalValue(),
+                dividend = it["dividend"].decimalValue(),
                 recordDate = it["recordDate"].asText(),
                 paymentDate = it["paymentDate"].asText(),
                 declarationDate = it["declarationDate"].asText(),
-                quantity = 0.0,
-                totalDividend = 0.0,
-                usdPlnRate = 0.0,
-                withholdingTaxPaid = 0.0,
-                dividendInPln = 0.0,
-                taxDueInPoland = 0.0
+                quantity = BigDecimal.ZERO,
+                totalDividend = BigDecimal.ZERO,
+                usdPlnRate = BigDecimal.ZERO,
+                withholdingTaxPaid = BigDecimal.ZERO,
+                dividendInPln = BigDecimal.ZERO,
+                taxDueInPoland = BigDecimal.ZERO
             )
         }
     }

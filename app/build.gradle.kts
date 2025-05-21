@@ -36,6 +36,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core:3.24.2")
     testImplementation("org.mockito:mockito-core:5.7.0") // Added for mocking
     testImplementation("org.mockito:mockito-junit-jupiter:5.7.0") // Mockito JUnit 5 integration
+    testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

@@ -6,6 +6,7 @@ import Stock
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.math.BigDecimal
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -36,18 +37,19 @@ class DividendService(
         }
     }
 
-    fun calculateTotalDividends(dividends: List<DividendDetail>): Double {
+    fun calculateTotalDividends(dividends: List<DividendDetail>): BigDecimal {
         return dividends.sumOf { it.totalDividend }
     }
 
     fun updateUsdPlnRateForDividends(stock: Stock): Stock {
         stock.dividends?.forEach { dividend ->
             val dayBefore = LocalDate.parse(dividend.paymentDate).minusDays(1)
-            val usdPlnRate = getHistoricalExchangeRate(dayBefore)
+            val usdPlnRate = getHistoricalExchangeRate(dayBefore).toBigDecimal()
             dividend.usdPlnRate = usdPlnRate
-            dividend.withholdingTaxPaid = dividend.dividend * 0.15
-            dividend.dividendInPln = dividend.dividend * usdPlnRate
-            dividend.taxDueInPoland = dividend.dividendInPln * 0.19 - dividend.withholdingTaxPaid * usdPlnRate
+            dividend.withholdingTaxPaid = dividend.dividend.multiply(BigDecimal("0.15"))
+            dividend.dividendInPln = dividend.dividend.multiply(usdPlnRate)
+            dividend.taxDueInPoland = dividend.dividendInPln.multiply(BigDecimal("0.19"))
+                .subtract(dividend.withholdingTaxPaid.multiply(usdPlnRate))
         }
         return stock
     }
@@ -87,12 +89,12 @@ fun getHistoricalExchangeRate(date: LocalDate, maxRetries: Int = 5): Double {
 }
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
-        stock.taxToBePaidInPoland = stock.dividends?.sumOf { it.taxDueInPoland * it.quantity } ?: 0.0
+        stock.taxToBePaidInPoland = stock.dividends?.sumOf { it.taxDueInPoland.multiply(it.quantity) } ?: BigDecimal.ZERO
         return stock
     }
 
     fun calculateTotalWithholdingTaxPaid(stock: Stock): Stock {
-        stock.totalWithholdingTaxPaid = stock.dividends?.sumOf { it.withholdingTaxPaid * it.quantity } ?: 0.0
+        stock.totalWithholdingTaxPaid = stock.dividends?.sumOf { it.withholdingTaxPaid.multiply(it.quantity) } ?: BigDecimal.ZERO
         return stock
     }
 }

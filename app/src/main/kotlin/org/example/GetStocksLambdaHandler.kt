@@ -1,4 +1,3 @@
-// GetStocksLambda.kt
 package com.example
 
 import CashFlowData
@@ -14,6 +13,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.core.type.TypeReference
+import java.math.BigDecimal
 
 // Assuming same data classes as in your original code (Stock, CurrentPriceData, etc.)
 
@@ -41,22 +41,22 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
                 .tableName("Stocks")
                 .build()
 
-val scanResponse = dynamoDbClient.scan(scanRequest)
-        val stocks = scanResponse.items().map { item ->
-            Stock(
-                symbol = item["symbol"]?.s() ?: "",
-                moneyInvested = item["moneyInvested"]?.n()?.toDouble() ?: 0.0,
-                currentPrice = objectMapper.readValue(item["currentPrice"]?.s() ?: "[]", object : TypeReference<List<CurrentPriceData>>() {}),
-                ownershipPeriods = objectMapper.readValue(item["ownershipPeriods"]?.s() ?: "[]", object : TypeReference<List<OwnershipPeriod>>() {}),
-                transactions = objectMapper.readValue(item["transactions"]?.s() ?: "[]", object : TypeReference<List<Transaction>>() {}),
-                dividends = item["dividends"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<DividendDetail>>() {}) },
-                totalDividendValue = item["totalDividendValue"]?.n()?.toDouble() ?: 0.0,
-                cashFlowData = item["cashFlowData"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<CashFlowData>>() {}) },
-                liabilitiesData = item["liabilitiesData"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<LiabilitiesData>>() {}) },
-                totalWithholdingTaxPaid = item["totalWithholdingTaxPaid"]?.n()?.toDouble(),
-                taxToBePaidInPoland = item["taxToBePaidInPoland"]?.n()?.toDouble()
-            )
-        }
+            val scanResponse = dynamoDbClient.scan(scanRequest)
+            val stocks = scanResponse.items().map { item ->
+                Stock(
+                    symbol = item["symbol"]?.s() ?: "",
+                    moneyInvested = item["moneyInvested"]?.n()?.toBigDecimal() ?: BigDecimal.ZERO,
+                    currentPrice = objectMapper.readValue(item["currentPrice"]?.s() ?: "[]", object : TypeReference<List<CurrentPriceData>>() {}),
+                    ownershipPeriods = objectMapper.readValue(item["ownershipPeriods"]?.s() ?: "[]", object : TypeReference<List<OwnershipPeriod>>() {}),
+                    transactions = objectMapper.readValue(item["transactions"]?.s() ?: "[]", object : TypeReference<List<Transaction>>() {}),
+                    dividends = item["dividends"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<DividendDetail>>() {}) },
+                    totalDividendValue = item["totalDividendValue"]?.n()?.toBigDecimal() ?: BigDecimal.ZERO,
+                    cashFlowData = item["cashFlowData"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<CashFlowData>>() {}) },
+                    liabilitiesData = item["liabilitiesData"]?.s()?.let { objectMapper.readValue(it, object : TypeReference<List<LiabilitiesData>>() {}) },
+                    totalWithholdingTaxPaid = item["totalWithholdingTaxPaid"]?.n()?.toBigDecimal(),
+                    taxToBePaidInPoland = item["taxToBePaidInPoland"]?.n()?.toBigDecimal()
+                )
+            }
 
             context.logger.log("Retrieved ${stocks.size} stocks")
             successResponse(stocks)
