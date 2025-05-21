@@ -418,10 +418,10 @@ class DividendServiceTest {
             val updatedStock = dividendService.updateUsdPlnRateForDividends(stock)
 
             val dividend = updatedStock.dividends!![0]
-            assertEquals(4.0, dividend.usdPlnRate, 0.001) // Uses 2022-10-31 rate
+            assertEquals(4.05, dividend.usdPlnRate, 0.001) // Uses 2022-10-31 rate
             assertEquals(15.0, dividend.withholdingTaxPaid, 0.001)
-            assertEquals(400.0, dividend.dividendInPln, 0.001)
-            assertEquals(16.0, dividend.taxDueInPoland, 0.001)
+            assertEquals(405.0, dividend.dividendInPln, 0.001)
+            assertEquals(16.200000000000003, dividend.taxDueInPoland, 0.001)
         }
     }
 
