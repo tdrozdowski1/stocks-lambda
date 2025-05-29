@@ -26,6 +26,22 @@ class DbService(
         return objectMapper.readValue(stocksJson)
     }
 
+    fun saveStock(stock: Stock) {
+        val item = mutableMapOf<String, AttributeValue>(
+            "symbol" to AttributeValue.builder().s(stock.symbol).build(),
+            "moneyInvested" to AttributeValue.builder().n(stock.moneyInvested.toString()).build(),
+            "ownershipPeriods" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.ownershipPeriods)).build(),
+            "transactions" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.transactions)).build()
+        )
+
+        val putRequest = PutItemRequest.builder()
+            .tableName(tableName)
+            .item(item)
+            .build()
+
+        dynamoDbClient.putItem(putRequest)
+    }
+
     fun updateStock(stock: Stock) {
         val currentStocks = getStocks().toMutableList()
         currentStocks.removeIf { it.symbol == stock.symbol }

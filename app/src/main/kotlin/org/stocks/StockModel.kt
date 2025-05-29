@@ -2,16 +2,16 @@ import java.math.BigDecimal
 
 data class Stock(
     val symbol: String,
-    val moneyInvested: BigDecimal,
-    val currentPrice: List<CurrentPriceData>,
-    val ownershipPeriods: List<OwnershipPeriod>,
     val transactions: List<Transaction>,
-    var dividends: List<DividendDetail>?,
-    var totalDividendValue: BigDecimal,
-    val cashFlowData: List<CashFlowData>?,
-    val liabilitiesData: List<LiabilitiesData>?,
-    var totalWithholdingTaxPaid: BigDecimal?,
-    var taxToBePaidInPoland: BigDecimal?
+    val moneyInvested: BigDecimal,
+    val ownershipPeriods: List<OwnershipPeriod>,
+    val currentPrice: List<CurrentPriceData>? = null,
+    var dividends: List<DividendDetail>? = null,
+    var totalDividendValue: BigDecimal? = null,
+    val cashFlowData: List<CashFlowData>? = null,
+    val liabilitiesData: List<LiabilitiesData>? = null,
+    var totalWithholdingTaxPaid: BigDecimal? = null,
+    var taxToBePaidInPoland: BigDecimal? = null,
 )
 
 data class CurrentPriceData(

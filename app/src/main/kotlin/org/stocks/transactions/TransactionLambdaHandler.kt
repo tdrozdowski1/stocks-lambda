@@ -87,14 +87,14 @@ class TransactionLambdaHandler(
                 symbol = transaction.symbol,
                 transactions = listOf(transaction),
                 moneyInvested = calculateMoneyInvested(listOf(transaction)),
-                currentPrice = emptyList(),
-                ownershipPeriods = calculateOwnershipPeriods(listOf(transaction)),
-                dividends = null,
-                totalDividendValue = BigDecimal.ZERO,
-                cashFlowData = null,
-                liabilitiesData = null,
-                taxToBePaidInPoland = null,
-                totalWithholdingTaxPaid = null
+//                currentPrice = emptyList(),
+                ownershipPeriods = calculateOwnershipPeriods(listOf(transaction))
+//                dividends = null,
+//                totalDividendValue = BigDecimal.ZERO,
+//                cashFlowData = null,
+//                liabilitiesData = null,
+//                taxToBePaidInPoland = null,
+//                totalWithholdingTaxPaid = null
             )
         }
 
