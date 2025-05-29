@@ -1,4 +1,4 @@
-package com.example
+package com.stocks
 
 import Stock
 import com.amazonaws.services.lambda.runtime.Context
@@ -9,7 +9,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 
-class LambdaHandler(
+class SaveStockLambdaHandler(
     private val dynamoDbClient: DynamoDbClient = DynamoDbClient.create() // Default to real client
 ) : RequestHandler<Map<String, Any>, Map<String, Any>> {
 
@@ -54,23 +54,10 @@ class LambdaHandler(
             val item = mutableMapOf<String, AttributeValue>(
                 "symbol" to AttributeValue.builder().s(stock.symbol).build(),
                 "moneyInvested" to AttributeValue.builder().n(stock.moneyInvested.toString()).build(),
-                "currentPrice" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.currentPrice)).build(),
-                "totalDividendValue" to AttributeValue.builder().n(stock.totalDividendValue.toString()).build(),
                 "ownershipPeriods" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.ownershipPeriods)).build(),
-                "transactions" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.transactions)).build(),
-                "dividends" to AttributeValue.builder().s(objectMapper.writeValueAsString(dividends)).build(),
-                "cashFlowData" to AttributeValue.builder().s(objectMapper.writeValueAsString(cashFlowData)).build(),
-                "liabilitiesData" to AttributeValue.builder().s(objectMapper.writeValueAsString(liabilitiesData)).build()
+                "transactions" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.transactions)).build()
             )
             context.logger.log("Prepared DynamoDB item")
-
-            stock.totalWithholdingTaxPaid?.let {
-                item["totalWithholdingTaxPaid"] = AttributeValue.builder().n(it.toString()).build()
-            } ?: run { item["totalWithholdingTaxPaid"] = AttributeValue.builder().nul(true).build() }
-
-            stock.taxToBePaidInPoland?.let {
-                item["taxToBePaidInPoland"] = AttributeValue.builder().n(it.toString()).build()
-            } ?: run { item["taxToBePaidInPoland"] = AttributeValue.builder().nul(true).build() }
 
             context.logger.log("Attempting to save to DynamoDB")
             val putRequest = PutItemRequest.builder()

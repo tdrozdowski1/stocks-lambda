@@ -1,22 +1,23 @@
-package org.example.transactions
+package org.stocks.transactions
 
 import DividendDetail
 import OwnershipPeriod
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import org.mockito.ArgumentMatchers.any
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.`when`
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
+import org.mockito.kotlin.whenever
 import java.math.BigDecimal
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
-class LambdaHandlerTest {
+class DividendServiceTest {
 
     private lateinit var dividendService: DividendService
     private lateinit var httpClient: HttpClient
@@ -33,28 +34,29 @@ class LambdaHandlerTest {
 
     @BeforeEach
     fun setUp() {
-        httpClient = mock(HttpClient::class.java)
+        httpClient = mock<HttpClient>()
         objectMapper = jacksonObjectMapper()
         dividendService = DividendService(httpClient, objectMapper)
 
-        `when`(httpClient.send(any<HttpRequest>(), any<HttpResponse.BodyHandler<String>>()))
-            .thenAnswer { invocation ->
-                val request = invocation.getArgument<HttpRequest>(0)
-                val uri = request.uri().toString()
-                val date = uri.substringAfter("from=").substringBefore("&")
-                val rate = exchangeRates[date] ?: throw RuntimeException("No rate for $date")
-                val responseBody = """
-                    {
-                      "historical": [
-                        {"date": "$date", "close": $rate}
-                      ]
-                    }
-                """.trimIndent()
-                val mockResponse = mock(HttpResponse::class.java)
-                @Suppress("UNCHECKED_CAST")
-                `when`(mockResponse.body()).thenReturn(responseBody)
-                mockResponse as HttpResponse<String>
+        whenever(httpClient.send(
+            any<HttpRequest>(),
+            eq(HttpResponse.BodyHandlers.ofString())
+        )).thenAnswer { invocation ->
+            val request = invocation.getArgument<HttpRequest>(0)
+            val uri = request.uri().toString()
+            val date = uri.substringAfter("from=").substringBefore("&")
+            val rate = exchangeRates[date] ?: throw RuntimeException("No rate for $date")
+            val responseBody = """
+            {
+              "historical": [
+                {"date": "$date", "close": $rate}
+              ]
             }
+        """.trimIndent()
+            mock<HttpResponse<String>>().apply {
+                whenever(body()).thenReturn(responseBody)
+            }
+        }
     }
 
     @Nested

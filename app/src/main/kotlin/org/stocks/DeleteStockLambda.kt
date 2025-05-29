@@ -1,4 +1,4 @@
-package com.example
+package com.stocks
 
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler

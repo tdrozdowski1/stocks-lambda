@@ -1,4 +1,4 @@
-package com.example
+package com.stocks
 
 import CashFlowData
 import CurrentPriceData

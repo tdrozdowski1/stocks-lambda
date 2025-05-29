@@ -1,9 +1,8 @@
-package org.example.transactions
+package org.stocks.transactions
 
 import DividendDetail
 import OwnershipPeriod
 import Stock
-import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigDecimal

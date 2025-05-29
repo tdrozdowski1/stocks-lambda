@@ -1,4 +1,4 @@
-package org.example.transactions
+package org.stocks.transactions
 
 import CurrentPriceData
 import DividendDetail
