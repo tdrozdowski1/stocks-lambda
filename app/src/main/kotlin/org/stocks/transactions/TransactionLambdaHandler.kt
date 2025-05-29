@@ -1,24 +1,15 @@
 package org.stocks.transactions
 
-import CurrentPriceData
-import DividendDetail
-import OwnershipPeriod
 import Transaction
 import Stock
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import org.stocks.db.DbService
 import org.stocks.transactions.services.DividendService
 import org.stocks.transactions.services.FinancialCalculationsService
 import org.stocks.transactions.services.FinancialModelingService
-import java.math.BigDecimal
-import java.net.URI
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.LocalDate
 
 class TransactionLambdaHandler(
     private val financialModelingService: FinancialModelingService = FinancialModelingService(),
@@ -105,57 +96,6 @@ class TransactionLambdaHandler(
 
         return stock
     }
-
-//    private fun calculateMoneyInvested(transactions: List<Transaction>): BigDecimal {
-//        var totalBuy = BigDecimal.ZERO
-//        var totalSell = BigDecimal.ZERO
-//        var commission = BigDecimal.ZERO
-//
-//        transactions.forEach { t ->
-//            commission = commission.add(t.commission)
-//            when (t.type) {
-//                "buy" -> totalBuy = totalBuy.add(t.amount.multiply(t.price))
-//                "sell" -> totalSell = totalSell.add(t.amount.multiply(t.price))
-//            }
-//        }
-//        return totalBuy.subtract(totalSell).add(commission)
-//    }
-//
-//    private fun calculateOwnershipPeriods(transactions: List<Transaction>): List<OwnershipPeriod> {
-//        val ownershipPeriods = mutableListOf<OwnershipPeriod>()
-//        var totalAmount = BigDecimal.ZERO
-//        var startDate: LocalDate? = null
-//
-//        transactions.forEach { t ->
-//            val transactionDate = LocalDate.parse(t.date)
-//            when (t.type) {
-//                "buy" -> {
-//                    if (totalAmount > BigDecimal.ZERO && startDate != null) {
-//                        ownershipPeriods.add(
-//                            OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
-//                        )
-//                    }
-//                    totalAmount = totalAmount.add(t.amount)
-//                    startDate = transactionDate
-//                }
-//                "sell" -> {
-//                    if (totalAmount > BigDecimal.ZERO && startDate != null) {
-//                        ownershipPeriods.add(
-//                            OwnershipPeriod(startDate.toString(), transactionDate.toString(), totalAmount)
-//                        )
-//                        totalAmount = totalAmount.subtract(t.amount)
-//                        startDate = if (totalAmount > BigDecimal.ZERO) transactionDate else null
-//                    }
-//                }
-//            }
-//        }
-//
-//        if (totalAmount > BigDecimal.ZERO && startDate != null) {
-//            ownershipPeriods.add(OwnershipPeriod(startDate.toString(), null, totalAmount))
-//        }
-//
-//        return ownershipPeriods
-//    }
 
     private fun corsHeaders(): Map<String, String> {
         return mapOf(

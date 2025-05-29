@@ -24,6 +24,7 @@ class FinancialCalculationsService {
     }
 
     fun calculateOwnershipPeriods(transactions: List<Transaction>): List<OwnershipPeriod> {
+        //TODO: Are transactions requried if we already have OwnershipPeriods?
         val ownershipPeriods = mutableListOf<OwnershipPeriod>()
         var totalAmount = BigDecimal.ZERO
         var startDate: LocalDate? = null
