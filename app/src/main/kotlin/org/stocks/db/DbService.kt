@@ -1,4 +1,4 @@
-package org.stocks.transactions
+package org.stocks.db
 
 import Stock
 import com.fasterxml.jackson.databind.ObjectMapper

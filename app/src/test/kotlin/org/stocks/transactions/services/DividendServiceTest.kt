@@ -1,4 +1,4 @@
-package org.stocks.transactions
+package org.stocks.transactions.services
 
 import DividendDetail
 import OwnershipPeriod

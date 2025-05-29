@@ -5,7 +5,7 @@ import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import org.stocks.transactions.DbService
+import org.stocks.db.DbService
 
 class SaveStockLambdaHandler(
     private val dbService: DbService = DbService()
