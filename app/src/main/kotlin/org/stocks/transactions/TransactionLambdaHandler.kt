@@ -34,20 +34,12 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "Error: No transaction body provided")
 
-        val nestedBody = try {
-            objectMapper.readTree(transactionJson).get("body").asText()
-        } catch (e: Exception) {
-            context.logger.log("Invalid nested body: ${e.message}")
-            return buildCorsResponse(400, "Error: Malformed body format")
-        }
-
         val transaction = try {
-            objectMapper.readValue(nestedBody, Transaction::class.java)
+            objectMapper.readValue(transactionJson, Transaction::class.java)
         } catch (e: Exception) {
             context.logger.log("Deserialization error: ${e.message}")
             return buildCorsResponse(400, "Error: Invalid transaction format")
         }
-
 
         val stock = addTransaction(transaction)
         val responseBody = objectMapper.writeValueAsString(stock)
@@ -99,9 +91,9 @@ class TransactionLambdaHandler(
 
     private fun corsHeaders(): Map<String, String> {
         return mapOf(
-            "Access-Control-Allow-Origin" to "https://main.d2nn1tu89v11eh.amplifyapp.com",
-            "Access-Control-Allow-Methods" to "OPTIONS, POST",
-            "Access-Control-Allow-Headers" to "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
+            "Access-Control-Allow-Origin" to "https://main.d1kexow7pbduqr.amplifyapp.com",
+            "Access-Control-Allow-Methods" to "OPTIONS,POST",
+            "Access-Control-Allow-Headers" to "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
         )
     }
 }

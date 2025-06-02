@@ -1,10 +1,8 @@
 package org.stocks.transactions.services
 
-import CurrentPriceData
 import DividendDetail
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import java.math.BigDecimal
 import java.net.URI
 import java.net.http.HttpClient
@@ -18,13 +16,14 @@ class FinancialModelingService(
     private val baseUrl: String = "https://financialmodelingprep.com/api/v3"
 ) {
 
-    fun getStockPrice(symbol: String): List<CurrentPriceData> {
+    fun getStockPrice(symbol: String): BigDecimal {
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl/quote/$symbol?apikey=$apiKey"))
             .GET()
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        return objectMapper.readValue(response.body())
+        val jsonArray = objectMapper.readTree(response.body())
+        return jsonArray[0]["price"].decimalValue()
     }
 
     fun getDividends(symbol: String): List<DividendDetail> {

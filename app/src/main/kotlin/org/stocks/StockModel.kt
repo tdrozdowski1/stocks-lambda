@@ -5,7 +5,8 @@ data class Stock(
     val transactions: List<Transaction>,
     val moneyInvested: BigDecimal,
     val ownershipPeriods: List<OwnershipPeriod>,
-    val currentPrice: List<CurrentPriceData>? = null,
+    //TODO check if current price still required
+    val currentPrice: BigDecimal? = null,
     var dividends: List<DividendDetail>? = null,
     var totalDividendValue: BigDecimal? = null,
     val cashFlowData: List<CashFlowData>? = null,
