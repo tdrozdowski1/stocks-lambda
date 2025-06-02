@@ -6,8 +6,8 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
-import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest
 
 class DbService(
     private val dynamoDbClient: DynamoDbClient = DynamoDbClient.builder().build(),
@@ -17,12 +17,21 @@ class DbService(
     private val tableName = "Stocks"
 
     fun getStocks(): List<Stock> {
-        val request = GetItemRequest.builder()
+        //TODO when do I need a single stock?
+        val scanRequest = ScanRequest.builder()
             .tableName(tableName)
             .build()
-        val response = dynamoDbClient.getItem(request)
-        val stocksJson = response.item()?.get("stocks")?.s() ?: "[]"
-        return objectMapper.readValue(stocksJson)
+        val response = dynamoDbClient.scan(scanRequest)
+        val items = response.items()
+        return items.mapNotNull { item ->
+            try {
+                val stockJson = item["stockData"]?.s() ?: return@mapNotNull null
+                objectMapper.readValue<Stock>(stockJson)
+            } catch (e: Exception) {
+                println("Error deserializing stock: ${e.message}")
+                null
+            }
+        }
     }
 
     fun saveStock(stock: Stock) {
