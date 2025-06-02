@@ -19,7 +19,6 @@ class DbService(
     fun getStocks(): List<Stock> {
         val request = GetItemRequest.builder()
             .tableName(tableName)
-            .key(mapOf("symbol" to AttributeValue.builder().s("ALL").build()))
             .build()
         val response = dynamoDbClient.getItem(request)
         val stocksJson = response.item()?.get("stocks")?.s() ?: "[]"
@@ -43,17 +42,19 @@ class DbService(
     }
 
     fun updateStock(stock: Stock) {
-        val currentStocks = getStocks().toMutableList()
-        currentStocks.removeIf { it.symbol == stock.symbol }
-        currentStocks.add(stock)
+        // Serialize the Stock object to JSON
+        val stockJson = objectMapper.writeValueAsString(stock)
+        // Create DynamoDB item with the stock's symbol as the partition key
         val item = mapOf(
-            "symbol" to AttributeValue.builder().s("ALL").build(),
-            "stocks" to AttributeValue.builder().s(objectMapper.writeValueAsString(currentStocks)).build()
+            "symbol" to AttributeValue.builder().s(stock.symbol).build(),
+            "stockData" to AttributeValue.builder().s(stockJson).build()
         )
+        // Build PutItem request to update the specific stock
         val request = PutItemRequest.builder()
             .tableName(tableName)
             .item(item)
             .build()
+        // Execute the update
         dynamoDbClient.putItem(request)
     }
 }
