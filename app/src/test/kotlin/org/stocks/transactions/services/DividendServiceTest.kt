@@ -29,30 +29,42 @@ class DividendServiceTest {
         "2022-10-31" to BigDecimal("4.0"),
         "2022-11-01" to BigDecimal("4.05"),
         "2023-12-01" to BigDecimal("4.5"),
-        "2023-11-01" to BigDecimal("4.2")
+        "2023-11-01" to BigDecimal("4.2"),
+        "2024-01-10" to BigDecimal("4.3")  // Add date needed for test
     )
 
     @BeforeEach
     fun setUp() {
-        httpClient = mock<HttpClient>()
+        httpClient = mock()
         objectMapper = jacksonObjectMapper()
         dividendService = DividendService(httpClient, objectMapper)
 
-        whenever(httpClient.send(
-            any<HttpRequest>(),
-            eq(HttpResponse.BodyHandlers.ofString())
-        )).thenAnswer { invocation ->
+        whenever(
+            httpClient.send(
+                any<HttpRequest>(),
+                eq(HttpResponse.BodyHandlers.ofString())
+            )
+        ).thenAnswer { invocation ->
             val request = invocation.getArgument<HttpRequest>(0)
             val uri = request.uri().toString()
-            val date = uri.substringAfter("from=").substringBefore("&")
-            val rate = exchangeRates[date] ?: throw RuntimeException("No rate for $date")
+
+            // Extract 'from' date from URL regardless of parameter order
+            val dateRegex = Regex("""[?&]from=(\d{4}-\d{2}-\d{2})""")
+            val match = dateRegex.find(uri)
+            val date = match?.groupValues?.get(1)
+                ?: throw RuntimeException("❌ No 'from' date found in URI: $uri")
+
+            val rate = exchangeRates[date]
+                ?: throw RuntimeException("❌ No exchange rate found for date $date")
+
             val responseBody = """
-            {
-              "historical": [
-                {"date": "$date", "close": $rate}
-              ]
-            }
-        """.trimIndent()
+                {
+                  "historical": [
+                    { "date": "$date", "close": $rate }
+                  ]
+                }
+            """.trimIndent()
+
             mock<HttpResponse<String>>().apply {
                 whenever(body()).thenReturn(responseBody)
             }
@@ -81,7 +93,11 @@ class DividendServiceTest {
                 )
             )
             val ownershipPeriods = listOf(
-                OwnershipPeriod(startDate = "2024-01-01", endDate = "2024-01-15", quantity = BigDecimal("10.0"))
+                OwnershipPeriod(
+                    startDate = "2024-01-01",
+                    endDate = "2024-01-15",
+                    quantity = BigDecimal("10.0")
+                )
             )
 
             val filteredDividends = dividendService.filterDividendsByOwnership(dividends, ownershipPeriods)
