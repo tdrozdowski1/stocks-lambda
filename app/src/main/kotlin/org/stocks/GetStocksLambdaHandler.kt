@@ -95,7 +95,7 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
         return mapOf(
             "Access-Control-Allow-Origin" to "https://main.d1kexow7pbduqr.amplifyapp.com",
             "Access-Control-Allow-Methods" to "GET, POST",
-            "Access-Control-Allow-Headers" to "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
+            "Access-Control-Allow-Headers" to "Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token"
         )
     }
 }
