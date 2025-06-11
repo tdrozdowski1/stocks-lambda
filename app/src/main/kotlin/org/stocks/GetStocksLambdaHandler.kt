@@ -94,7 +94,7 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
     private fun corsHeaders(): Map<String, String> {
         return mapOf(
             "Access-Control-Allow-Origin" to "https://main.d1kexow7pbduqr.amplifyapp.com",
-            "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Methods" to "GET, POST",
             "Access-Control-Allow-Headers" to "Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token"
         )
     }
