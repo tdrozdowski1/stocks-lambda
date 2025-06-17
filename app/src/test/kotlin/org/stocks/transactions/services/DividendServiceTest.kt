@@ -30,7 +30,7 @@ class DividendServiceTest {
         "2022-11-01" to BigDecimal("4.05"),
         "2023-12-01" to BigDecimal("4.5"),
         "2023-11-01" to BigDecimal("4.2"),
-        "2024-01-10" to BigDecimal("4.3")  // Add date needed for test
+        "2024-01-10" to BigDecimal("4.3")
     )
 
     @BeforeEach

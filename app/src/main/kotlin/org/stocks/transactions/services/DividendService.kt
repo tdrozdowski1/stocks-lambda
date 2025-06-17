@@ -31,7 +31,7 @@ class DividendService(
                 }
             } catch (e: DateTimeParseException) {
                 println("Skipping dividend with invalid date: '${dividend.date}'")
-                false // Skip invalid dates
+                false
             }
         }
     }
@@ -94,7 +94,7 @@ class DividendService(
             }.filter { it.second != null }
 
             val sortedRates = rates.sortedWith(Comparator { a, b ->
-                b.first.compareTo(a.first) // Descending order
+                b.first.compareTo(a.first)
             })
 
             if (sortedRates.isNotEmpty()) {
@@ -106,7 +106,7 @@ class DividendService(
         }
 
         println("⚠️ No USD/PLN exchange rate found for range $endDate to $startDate")
-        return null // Return null if no rate found
+        return null
     }
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
