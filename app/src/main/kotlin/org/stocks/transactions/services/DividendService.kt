@@ -41,27 +41,35 @@ class DividendService(
     }
 
     fun updateUsdPlnRateForDividends(stock: Stock): Stock {
+        val currentDate = LocalDate.now()
         stock.dividends?.forEach { dividend ->
-            val dayBefore = LocalDate.parse(dividend.paymentDate).minusDays(1)
-            val usdPlnRate = getHistoricalExchangeRate(dayBefore)
-            if (usdPlnRate != null) {
+            try {
+                val paymentDate = LocalDate.parse(dividend.paymentDate)
+                if (paymentDate.isAfter(currentDate)) {
+                    println("⚠️ Skipping future payment date: ${dividend.paymentDate}")
+                    return@forEach
+                }
+                val dayBefore = paymentDate.minusDays(1)
+                val usdPlnRate = getHistoricalExchangeRate(dayBefore) ?: run {
+                    println("⚠️ No USD/PLN exchange rate found for ${dayBefore}. Using default rate of 4.0")
+                    BigDecimal("4.0") // Fallback rate
+                }
                 dividend.usdPlnRate = usdPlnRate
-            } else {
-                println("⚠️ No USD/PLN exchange rate found for ${dayBefore}. Using default rate of 4.0")
-                dividend.usdPlnRate = BigDecimal("4.0")
+                dividend.withholdingTaxPaid = dividend.dividend.multiply(BigDecimal("0.15"))
+                dividend.dividendInPln = dividend.dividend.multiply(usdPlnRate)
+                dividend.taxDueInPoland = dividend.dividendInPln.multiply(BigDecimal("0.19"))
+                    .subtract(dividend.withholdingTaxPaid.multiply(usdPlnRate))
+            } catch (e: DateTimeParseException) {
+                println("⚠️ Invalid payment date format: ${dividend.paymentDate}")
             }
-            dividend.withholdingTaxPaid = dividend.dividend.multiply(BigDecimal("0.15"))
-            dividend.dividendInPln = dividend.dividend.multiply(usdPlnRate)
-            dividend.taxDueInPoland = dividend.dividendInPln.multiply(BigDecimal("0.19"))
-                .subtract(dividend.withholdingTaxPaid.multiply(usdPlnRate))
         }
         return stock
     }
 
     fun getHistoricalExchangeRate(date: LocalDate): BigDecimal? {
         val startDate = date
-        val endDate = date.minusDays(5)
-        val url = "$BASE_URL/historical-price-full/forex/USDPLN?from=$endDate&to=$startDate&apikey=$API_KEY"
+        val endDate = date.minusDays(10) // 10-day range for robustness
+        val url = "$BASE_URL/historical-price-full/USDPLN?from=$endDate&to=$startDate&apikey=$API_KEY"
 
         println("📡 Fetching exchange rate for range $endDate to $startDate")
 
@@ -86,7 +94,7 @@ class DividendService(
             }.filter { it.second != null }
 
             val sortedRates = rates.sortedWith(Comparator { a, b ->
-                b.first.compareTo(a.first)
+                b.first.compareTo(a.first) // Descending order
             })
 
             if (sortedRates.isNotEmpty()) {
