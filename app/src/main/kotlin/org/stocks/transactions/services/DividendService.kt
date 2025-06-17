@@ -43,8 +43,13 @@ class DividendService(
     fun updateUsdPlnRateForDividends(stock: Stock): Stock {
         stock.dividends?.forEach { dividend ->
             val dayBefore = LocalDate.parse(dividend.paymentDate).minusDays(1)
-            val usdPlnRate = getHistoricalExchangeRate(dayBefore).toBigDecimal()
-            dividend.usdPlnRate = usdPlnRate
+            val usdPlnRate = getHistoricalExchangeRate(dayBefore)
+            if (usdPlnRate != null) {
+                dividend.usdPlnRate = usdPlnRate
+            } else {
+                println("⚠️ No USD/PLN exchange rate found for ${dayBefore}. Using default rate of 4.0")
+                dividend.usdPlnRate = BigDecimal("4.0")
+            }
             dividend.withholdingTaxPaid = dividend.dividend.multiply(BigDecimal("0.15"))
             dividend.dividendInPln = dividend.dividend.multiply(usdPlnRate)
             dividend.taxDueInPoland = dividend.dividendInPln.multiply(BigDecimal("0.19"))
@@ -53,39 +58,47 @@ class DividendService(
         return stock
     }
 
-    fun getHistoricalExchangeRate(date: LocalDate, maxRetries: Int = 5): Double {
-        var currentDate = date
-        var attempts = 0
+    fun getHistoricalExchangeRate(date: LocalDate): BigDecimal? {
+        val startDate = date
+        val endDate = date.minusDays(5)
+        val url = "$BASE_URL/historical-price-full/forex/USDPLN?from=$endDate&to=$startDate&apikey=$API_KEY"
 
-        while (attempts <= maxRetries) {
-            val url = "$BASE_URL/stable/historical-price-eod/full?symbol=USDPLN&from=$currentDate&to=$currentDate&apikey=$API_KEY"
-            val request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build()
+        println("📡 Fetching exchange rate for range $endDate to $startDate")
 
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            val responseBody = response.body()
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .GET()
+            .build()
 
-            println("📦 Exchange Rate API Response for $currentDate: $responseBody")
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val responseBody = response.body()
 
-            val root = objectMapper.readTree(responseBody)
-            val historical = root.get("historical")
+        println("📦 Exchange Rate API Response for $endDate to $startDate: $responseBody")
 
-            if (historical != null && historical.isArray && historical.size() > 0) {
-                val entry = historical[0]
-                val rate = entry.get("close")?.asDouble()
-                if (rate != null) {
-                    println("✅ Found USD/PLN rate for $currentDate: $rate")
-                    return rate
-                }
+        val root = objectMapper.readTree(responseBody)
+        val historical = root.get("historical")
+
+        if (historical != null && historical.isArray && historical.size() > 0) {
+            val rates = historical.map { node ->
+                val rateDate = LocalDate.parse(node.get("date").asText())
+                val closeRate = node.get("close")?.asDouble()
+                Pair(rateDate, closeRate)
+            }.filter { it.second != null }
+
+            val sortedRates = rates.sortedWith(Comparator { a, b ->
+                b.first.compareTo(a.first)
+            })
+
+            if (sortedRates.isNotEmpty()) {
+                val (latestDate, latestRate) = sortedRates.first()
+                val bigDecimalRate = latestRate!!.toBigDecimal()
+                println("✅ Found USD/PLN rate for $latestDate: $bigDecimalRate")
+                return bigDecimalRate
             }
-
-            currentDate = currentDate.minusDays(1)
-            attempts++
         }
 
-        throw RuntimeException("⚠️ No USD/PLN exchange rate found after $maxRetries retries starting from $date")
+        println("⚠️ No USD/PLN exchange rate found for range $endDate to $startDate")
+        return null // Return null if no rate found
     }
 
     fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
