@@ -44,9 +44,7 @@ class TransactionLambdaHandlerTest {
     @BeforeEach
     fun setUp() {
         objectMapper = jacksonObjectMapper()
-        // Configure context to return mock logger
         whenever(context.logger).thenReturn(lambdaLogger)
-        // Allow logger.log to be called without throwing
         whenever(lambdaLogger.log(any<String>())).thenAnswer { /* No-op */ }
         handler = TransactionLambdaHandler(
             financialModelingService,
@@ -58,7 +56,7 @@ class TransactionLambdaHandlerTest {
     }
 
     @Test
-    fun `should handle valid POST request and return stock response`() {
+    fun `should handle valid POST request and return stock response with dividends`() {
         // Arrange
         val transaction = Transaction(
             symbol = "PEP",
@@ -73,26 +71,61 @@ class TransactionLambdaHandlerTest {
             "body" to objectMapper.writeValueAsString(transaction)
         )
 
-        // Mock dependencies
-        val stock = Stock(
+        // Sample dividend and ownership period
+        val dividend = DividendDetail(
+            date = "2024-12-10",
+            label = "Q4 Dividend",
+            adjDividend = BigDecimal("0.5"),
+            dividend = BigDecimal("0.5"),
+            recordDate = "2024-12-09",
+            paymentDate = "2024-12-10",
+            declarationDate = "2024-12-01",
+            quantity = BigDecimal.ZERO,
+            totalDividend = BigDecimal.ZERO,
+            usdPlnRate = BigDecimal.ZERO,
+            withholdingTaxPaid = BigDecimal.ZERO,
+            dividendInPln = BigDecimal.ZERO,
+            taxDueInPoland = BigDecimal.ZERO
+        )
+        val ownershipPeriod = OwnershipPeriod(
+            startDate = "2024-12-01",
+            endDate = null,
+            quantity = BigDecimal("14")
+        )
+
+        // Stock objects for different stages
+        val initialStock = Stock(
             symbol = "PEP",
             transactions = listOf(transaction),
             currentPrice = BigDecimal.ONE,
-            moneyInvested = BigDecimal("15"), // price * amount + commission
-            ownershipPeriods = emptyList(),
+            moneyInvested = BigDecimal("15"),
+            ownershipPeriods = listOf(ownershipPeriod),
             dividends = emptyList(),
-            totalDividendValue = BigDecimal.ZERO
+            totalDividendValue = null
         )
+        val finalStock = Stock(
+            symbol = "PEP",
+            transactions = listOf(transaction),
+            currentPrice = BigDecimal.ONE,
+            moneyInvested = BigDecimal("15"),
+            ownershipPeriods = listOf(ownershipPeriod),
+            dividends = listOf(dividend.copy(quantity = BigDecimal("14"), totalDividend = BigDecimal("7.0"))),
+            totalDividendValue = BigDecimal("7.0")
+        )
+
+        // Mock dependencies
         whenever(dbService.getStocks()).thenReturn(emptyList())
         whenever(financialCalculationsService.calculateMoneyInvested(listOf(transaction))).thenReturn(BigDecimal("15"))
-        whenever(financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))).thenReturn(emptyList())
+        whenever(financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))).thenReturn(listOf(ownershipPeriod))
         whenever(financialModelingService.getStockPrice("PEP")).thenReturn(BigDecimal.ONE)
-        whenever(financialModelingService.getDividends("PEP")).thenReturn(emptyList())
-        whenever(dividendService.filterDividendsByOwnership(emptyList(), emptyList())).thenReturn(emptyList())
-        whenever(dividendService.calculateTotalDividends(emptyList())).thenReturn(BigDecimal.ZERO)
-        whenever(dividendService.updateUsdPlnRateForDividends(stock)).thenReturn(stock)
-        whenever(dividendService.calculateTaxToBePaidInPoland(stock)).thenReturn(stock)
-        whenever(dividendService.calculateTotalWithholdingTaxPaid(stock)).thenReturn(stock)
+        whenever(financialModelingService.getDividends("PEP")).thenReturn(listOf(dividend))
+        whenever(dividendService.filterDividendsByOwnership(listOf(dividend), listOf(ownershipPeriod))).thenReturn(
+            listOf(dividend.copy(quantity = BigDecimal("14"), totalDividend = BigDecimal("7.0")))
+        )
+        whenever(dividendService.calculateTotalDividends(any())).thenReturn(BigDecimal("7.0"))
+        whenever(dividendService.updateUsdPlnRateForDividends(any())).thenReturn(finalStock)
+        whenever(dividendService.calculateTaxToBePaidInPoland(any())).thenReturn(finalStock)
+        whenever(dividendService.calculateTotalWithholdingTaxPaid(any())).thenReturn(finalStock)
 
         // Act
         val response = handler.handleRequest(input, context)
@@ -110,5 +143,9 @@ class TransactionLambdaHandlerTest {
         assertEquals(BigDecimal.ONE, returnedStock.currentPrice)
         assertEquals(1, returnedStock.transactions.size)
         assertEquals(transaction, returnedStock.transactions[0])
+        assertEquals(1, returnedStock.dividends?.size)
+        assertEquals(BigDecimal("14"), returnedStock.dividends?.get(0)?.quantity)
+        assertEquals(BigDecimal("7.0"), returnedStock.dividends?.get(0)?.totalDividend)
+        assertEquals(BigDecimal("7.0"), returnedStock.totalDividendValue)
     }
 }

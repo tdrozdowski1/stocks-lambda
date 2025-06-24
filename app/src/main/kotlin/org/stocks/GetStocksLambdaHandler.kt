@@ -22,7 +22,6 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
     override fun handleRequest(event: Map<String, Any>, context: Context): Map<String, Any> {
         context.logger.log("Received event: $event")
 
-        // Handle CORS Preflight
         if (event["httpMethod"] == "OPTIONS") {
             return mapOf(
                 "statusCode" to 200,
@@ -34,7 +33,6 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
         return try {
             context.logger.log("Processing GET request")
 
-            // Scan the entire table (for all stocks)
             val scanRequest = ScanRequest.builder()
                 .tableName("Stocks")
                 .build()

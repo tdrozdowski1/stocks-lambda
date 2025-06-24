@@ -80,9 +80,10 @@ class TransactionLambdaHandler(
 
         val dividendsData = financialModelingService.getDividends(stock.symbol)
         stock.dividends = dividendService.filterDividendsByOwnership(dividendsData, stock.ownershipPeriods)
-        stock.totalDividendValue = dividendService.calculateTotalDividends(stock.dividends!!)
+        stock.dividends = dividendService.calculateDividendsBasedOnOwnership(stock.dividends!!, stock.ownershipPeriods)
 
         stock = dividendService.updateUsdPlnRateForDividends(stock)
+        stock.totalDividendValue = dividendService.calculateTotalDividends(stock.dividends!!)
         stock = dividendService.calculateTaxToBePaidInPoland(stock)
         stock = dividendService.calculateTotalWithholdingTaxPaid(stock)
 

@@ -11,6 +11,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 class DividendService(
@@ -117,5 +118,25 @@ class DividendService(
     fun calculateTotalWithholdingTaxPaid(stock: Stock): Stock {
         stock.totalWithholdingTaxPaid = stock.dividends?.sumOf { it.withholdingTaxPaid.multiply(it.quantity) } ?: BigDecimal.ZERO
         return stock
+    }
+
+    fun calculateDividendsBasedOnOwnership(dividendDetails: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
+        return dividendDetails.map { dividendDetail ->
+            val paymentDate = LocalDate.parse(dividendDetail.paymentDate, DateTimeFormatter.ISO_LOCAL_DATE)
+
+            val matchingPeriod = ownershipPeriods.find { period ->
+                val startDate = LocalDate.parse(period.startDate, DateTimeFormatter.ISO_LOCAL_DATE)
+                val endDate = period.endDate?.let { LocalDate.parse(it, DateTimeFormatter.ISO_LOCAL_DATE) }
+                paymentDate >= startDate && (endDate == null || paymentDate < endDate)
+            }
+
+            val quantity = matchingPeriod?.quantity ?: BigDecimal.ZERO
+            val totalDividend = quantity * dividendDetail.dividend
+
+            dividendDetail.copy(
+                quantity = quantity,
+                totalDividend = totalDividend
+            )
+        }
     }
 }
