@@ -2,7 +2,6 @@ package org.stocks.transactions.services
 
 import DividendDetail
 import OwnershipPeriod
-import Stock
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigDecimal
@@ -12,28 +11,46 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 class DividendService(
     private val httpClient: HttpClient = HttpClient.newHttpClient(),
     private val objectMapper: ObjectMapper = jacksonObjectMapper(),
-    private val API_KEY: String = "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D",
-    private val BASE_URL: String = "https://financialmodelingprep.com/api/v3"
+    private val apiKey: String = System.getenv("FINANCIAL_MODELING_API_KEY") ?: "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D",
+    private val baseUrl: String = System.getenv("FINANCIAL_MODELING_BASE_URL") ?: "https://financialmodelingprep.com/api/v3"
 ) {
 
-    fun filterDividendsByOwnership(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
+    fun processDividends(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
         return dividends.filter { dividend ->
-            try {
-                val dividendDate = LocalDate.parse(dividend.date)
+            safeParseDate(dividend.date)?.let { dividendDate ->
                 ownershipPeriods.any { period ->
-                    val start = LocalDate.parse(period.startDate)
-                    val end = period.endDate?.let { LocalDate.parse(it) }
+                    val start = safeParseDate(period.startDate) ?: return@any false
+                    val end = period.endDate?.let { safeParseDate(it) }
                     dividendDate >= start && (end == null || dividendDate <= end)
                 }
-            } catch (e: DateTimeParseException) {
-                println("Skipping dividend with invalid date: '${dividend.date}'")
-                false
+            } ?: false
+        }.map { dividend ->
+            val paymentDate = safeParseDate(dividend.paymentDate) ?: return@map dividend
+            val matchingPeriod = ownershipPeriods.find { period ->
+                val start = safeParseDate(period.startDate) ?: return@find false
+                val end = period.endDate?.let { safeParseDate(it) }
+                paymentDate >= start && (end == null || paymentDate < end)
             }
+
+            val quantity = matchingPeriod?.quantity ?: BigDecimal.ZERO
+            val totalDividend = quantity * dividend.dividend
+            val usdPlnRate = getHistoricalExchangeRate(paymentDate.minusDays(1)) ?: BigDecimal("4.0")
+            val withholdingTaxPaid = dividend.dividend * BigDecimal("0.15")
+            val dividendInPln = dividend.dividend * usdPlnRate
+            val taxDueInPoland = dividendInPln * BigDecimal("0.19") - withholdingTaxPaid * usdPlnRate
+
+            dividend.copy(
+                quantity = quantity,
+                totalDividend = totalDividend,
+                usdPlnRate = usdPlnRate,
+                withholdingTaxPaid = withholdingTaxPaid,
+                dividendInPln = dividendInPln,
+                taxDueInPoland = taxDueInPoland
+            )
         }
     }
 
@@ -41,102 +58,32 @@ class DividendService(
         return dividends.sumOf { it.totalDividend }
     }
 
-    fun updateUsdPlnRateForDividends(stock: Stock): Stock {
-        val currentDate = LocalDate.now()
-        stock.dividends?.forEach { dividend ->
-            try {
-                val paymentDate = LocalDate.parse(dividend.paymentDate)
-                if (paymentDate.isAfter(currentDate)) {
-                    println("⚠️ Skipping future payment date: ${dividend.paymentDate}")
-                    return@forEach
-                }
-                val dayBefore = paymentDate.minusDays(1)
-                val usdPlnRate = getHistoricalExchangeRate(dayBefore) ?: run {
-                    println("⚠️ No USD/PLN exchange rate found for ${dayBefore}. Using default rate of 4.0")
-                    BigDecimal("4.0") // Fallback rate
-                }
-                dividend.usdPlnRate = usdPlnRate
-                dividend.withholdingTaxPaid = dividend.dividend.multiply(BigDecimal("0.15"))
-                dividend.dividendInPln = dividend.dividend.multiply(usdPlnRate)
-                dividend.taxDueInPoland = dividend.dividendInPln.multiply(BigDecimal("0.19"))
-                    .subtract(dividend.withholdingTaxPaid.multiply(usdPlnRate))
-            } catch (e: DateTimeParseException) {
-                println("⚠️ Invalid payment date format: ${dividend.paymentDate}")
-            }
-        }
-        return stock
+    fun calculateTaxToBePaidInPoland(dividends: List<DividendDetail>): BigDecimal {
+        return dividends.sumOf { it.taxDueInPoland * it.quantity }
     }
 
-    fun getHistoricalExchangeRate(date: LocalDate): BigDecimal? {
-        val startDate = date
-        val endDate = date.minusDays(10) // 10-day range for robustness
-        val url = "$BASE_URL/historical-price-full/USDPLN?from=$endDate&to=$startDate&apikey=$API_KEY"
+    fun calculateTotalWithholdingTaxPaid(dividends: List<DividendDetail>): BigDecimal {
+        return dividends.sumOf { it.withholdingTaxPaid * it.quantity }
+    }
 
-        println("📡 Fetching exchange rate for range $endDate to $startDate")
-
-        val request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .GET()
-            .build()
-
+    private fun getHistoricalExchangeRate(date: LocalDate): BigDecimal? {
+        val url = "$baseUrl/historical-price-full/USDPLN?from=$date&to=$date&apikey=$apiKey"
+        val request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-        val responseBody = response.body()
+        val root = objectMapper.readTree(response.body())
+        val historical = root.get("historical")?.takeIf { it.isArray && it.size() > 0 }
+            ?: return null
 
-        println("📦 Exchange Rate API Response for $endDate to $startDate: $responseBody")
-
-        val root = objectMapper.readTree(responseBody)
-        val historical = root.get("historical")
-
-        if (historical != null && historical.isArray && historical.size() > 0) {
-            val rates = historical.map { node ->
-                val rateDate = LocalDate.parse(node.get("date").asText())
-                val closeRate = node.get("close")?.asDouble()
-                Pair(rateDate, closeRate)
-            }.filter { it.second != null }
-
-            val sortedRates = rates.sortedWith(Comparator { a, b ->
-                b.first.compareTo(a.first)
-            })
-
-            if (sortedRates.isNotEmpty()) {
-                val (latestDate, latestRate) = sortedRates.first()
-                val bigDecimalRate = latestRate!!.toBigDecimal()
-                println("✅ Found USD/PLN rate for $latestDate: $bigDecimalRate")
-                return bigDecimalRate
-            }
-        }
-
-        println("⚠️ No USD/PLN exchange rate found for range $endDate to $startDate")
-        return null
+        val rate = historical[0].get("close")?.asDouble()?.toBigDecimal()
+        return rate?.also { println("✅ Found USD/PLN rate for $date: $it") }
     }
 
-    fun calculateTaxToBePaidInPoland(stock: Stock): Stock {
-        stock.taxToBePaidInPoland = stock.dividends?.sumOf { it.taxDueInPoland.multiply(it.quantity) } ?: BigDecimal.ZERO
-        return stock
-    }
-
-    fun calculateTotalWithholdingTaxPaid(stock: Stock): Stock {
-        stock.totalWithholdingTaxPaid = stock.dividends?.sumOf { it.withholdingTaxPaid.multiply(it.quantity) } ?: BigDecimal.ZERO
-        return stock
-    }
-
-    fun calculateDividendsBasedOnOwnership(dividendDetails: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
-        return dividendDetails.map { dividendDetail ->
-            val paymentDate = LocalDate.parse(dividendDetail.paymentDate, DateTimeFormatter.ISO_LOCAL_DATE)
-
-            val matchingPeriod = ownershipPeriods.find { period ->
-                val startDate = LocalDate.parse(period.startDate, DateTimeFormatter.ISO_LOCAL_DATE)
-                val endDate = period.endDate?.let { LocalDate.parse(it, DateTimeFormatter.ISO_LOCAL_DATE) }
-                paymentDate >= startDate && (endDate == null || paymentDate < endDate)
-            }
-
-            val quantity = matchingPeriod?.quantity ?: BigDecimal.ZERO
-            val totalDividend = quantity * dividendDetail.dividend
-
-            dividendDetail.copy(
-                quantity = quantity,
-                totalDividend = totalDividend
-            )
+    private fun safeParseDate(dateStr: String): LocalDate? {
+        return try {
+            LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE)
+        } catch (e: Exception) {
+            println("⚠️ Invalid date format: $dateStr")
+            null
         }
     }
 }

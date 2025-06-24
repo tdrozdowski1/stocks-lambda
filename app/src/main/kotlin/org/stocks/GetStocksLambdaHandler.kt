@@ -53,8 +53,8 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
                     currentPrice = financialModelingService.getStockPrice(stock.symbol),
                     dividends = financialModelingService.getDividends(stock.symbol),
                     totalDividendValue = dividendService.calculateTotalDividends(stock.dividends ?: emptyList()),
-                    totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(stock).totalWithholdingTaxPaid,
-                    taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(stock).taxToBePaidInPoland,
+                    totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(stock.dividends ?: emptyList()),
+                    taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(stock.dividends ?: emptyList()),
                 )
             }
 

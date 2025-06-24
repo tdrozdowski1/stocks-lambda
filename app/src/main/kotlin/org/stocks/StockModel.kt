@@ -5,39 +5,13 @@ data class Stock(
     val transactions: List<Transaction>,
     val moneyInvested: BigDecimal,
     val ownershipPeriods: List<OwnershipPeriod>,
-    //TODO check if current price still required
     val currentPrice: BigDecimal? = null,
-    var dividends: List<DividendDetail>? = null,
-    var totalDividendValue: BigDecimal? = null,
+    val dividends: List<DividendDetail>? = null,
+    val totalDividendValue: BigDecimal? = null,
     val cashFlowData: List<CashFlowData>? = null,
     val liabilitiesData: List<LiabilitiesData>? = null,
-    var totalWithholdingTaxPaid: BigDecimal? = null,
-    var taxToBePaidInPoland: BigDecimal? = null,
-)
-
-data class CurrentPriceData(
-    val symbol: String,
-    val name: String,
-    val price: BigDecimal,
-    val changesPercentage: BigDecimal,
-    val change: BigDecimal,
-    val dayLow: BigDecimal,
-    val dayHigh: BigDecimal,
-    val yearHigh: BigDecimal,
-    val yearLow: BigDecimal,
-    val marketCap: Long,
-    val priceAvg50: BigDecimal,
-    val priceAvg200: BigDecimal,
-    val exchange: String,
-    val volume: Long,
-    val avgVolume: Long,
-    val open: BigDecimal,
-    val previousClose: BigDecimal,
-    val eps: BigDecimal,
-    val pe: BigDecimal,
-    val earningsAnnouncement: String,
-    val sharesOutstanding: Long,
-    val timestamp: Long
+    val totalWithholdingTaxPaid: BigDecimal? = null,
+    val taxToBePaidInPoland: BigDecimal? = null
 )
 
 data class OwnershipPeriod(val startDate: String, val endDate: String?, val quantity: BigDecimal)

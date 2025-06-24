@@ -1,15 +1,13 @@
 package org.stocks.transactions
 
-import Transaction
 import Stock
+import Transaction
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.stocks.db.DbService
-import org.stocks.transactions.services.DividendService
-import org.stocks.transactions.services.FinancialCalculationsService
-import org.stocks.transactions.services.FinancialModelingService
+import org.stocks.transactions.services.*
 
 class TransactionLambdaHandler(
     private val financialModelingService: FinancialModelingService = FinancialModelingService(),
@@ -22,29 +20,62 @@ class TransactionLambdaHandler(
     override fun handleRequest(input: Map<String, Any>, context: Context): Map<String, Any> {
         context.logger.log("Raw input: $input\n")
 
-        val method = input["httpMethod"] as? String ?: "GET"
-        if (method == "OPTIONS") {
-            return mapOf(
-                "statusCode" to 200,
-                "headers" to corsHeaders(),
-                "body" to ""
-            )
+        if (input["httpMethod"] == "OPTIONS") {
+            return buildCorsResponse(200, "")
         }
 
         val transactionJson = input["body"] as? String
-            ?: return buildCorsResponse(400, "Error: No transaction body provided")
+            ?: return buildCorsResponse(400, "No transaction body provided")
 
-        val transaction = try {
-            objectMapper.readValue(transactionJson, Transaction::class.java)
-        } catch (e: Exception) {
-            context.logger.log("Deserialization error: ${e.message}")
-            return buildCorsResponse(400, "Error: Invalid transaction format")
+        return runCatching {
+            val transaction = objectMapper.readValue(transactionJson, Transaction::class.java)
+            val stock = processTransaction(transaction)
+            buildCorsResponse(200, objectMapper.writeValueAsString(stock))
+        }.getOrElse { e ->
+            context.logger.log("Error: ${e.message}")
+            buildCorsResponse(400, "Invalid transaction format: ${e.message}")
         }
+    }
 
-        val stock = addTransaction(transaction)
-        val responseBody = objectMapper.writeValueAsString(stock)
+    private fun processTransaction(transaction: Transaction): Stock {
+        val currentStocks = dbService.getStocks()
+        val stock = currentStocks.find { it.symbol == transaction.symbol }?.let { existingStock ->
+            updateExistingStock(existingStock, transaction)
+        } ?: createNewStock(transaction)
 
-        return buildCorsResponse(200, responseBody)
+        return enrichStockData(stock)
+    }
+
+    private fun updateExistingStock(stock: Stock, transaction: Transaction): Stock {
+        val updatedTransactions = stock.transactions + transaction
+        return stock.copy(
+            transactions = updatedTransactions,
+            moneyInvested = financialCalculationsService.calculateMoneyInvested(updatedTransactions),
+            ownershipPeriods = financialCalculationsService.calculateOwnershipPeriods(updatedTransactions)
+        )
+    }
+
+    private fun createNewStock(transaction: Transaction): Stock {
+        val transactions = listOf(transaction)
+        return Stock(
+            symbol = transaction.symbol,
+            transactions = transactions,
+            moneyInvested = financialCalculationsService.calculateMoneyInvested(transactions),
+            ownershipPeriods = financialCalculationsService.calculateOwnershipPeriods(transactions)
+        )
+    }
+
+    private fun enrichStockData(stock: Stock): Stock {
+        val updatedStock = stock.copy(currentPrice = financialModelingService.getStockPrice(stock.symbol))
+        val dividendsData = financialModelingService.getDividends(stock.symbol)
+        val processedDividends = dividendService.processDividends(dividendsData, stock.ownershipPeriods)
+
+        return updatedStock.copy(
+            dividends = processedDividends,
+            totalDividendValue = dividendService.calculateTotalDividends(processedDividends),
+            taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(processedDividends),
+            totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(processedDividends)
+        ).also { dbService.updateStock(it) }
     }
 
     private fun buildCorsResponse(statusCode: Int, body: String): Map<String, Any> {
@@ -55,46 +86,9 @@ class TransactionLambdaHandler(
         )
     }
 
-    private fun addTransaction(transaction: Transaction): Stock {
-        val currentStocks = dbService.getStocks()
-        var stock = currentStocks.find { it.symbol == transaction.symbol }
-
-        if (stock != null) {
-            val updatedTransactions = stock.transactions + transaction
-            stock = stock.copy(
-                transactions = updatedTransactions,
-                moneyInvested = financialCalculationsService.calculateMoneyInvested(updatedTransactions),
-                ownershipPeriods = financialCalculationsService.calculateOwnershipPeriods(updatedTransactions)
-            )
-        } else {
-            stock = Stock(
-                symbol = transaction.symbol,
-                transactions = listOf(transaction),
-                moneyInvested = financialCalculationsService.calculateMoneyInvested(listOf(transaction)),
-                ownershipPeriods = financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))
-            )
-        }
-        dbService.updateStock(stock)
-
-        stock = stock.copy(currentPrice = financialModelingService.getStockPrice(stock.symbol))
-
-        val dividendsData = financialModelingService.getDividends(stock.symbol)
-        stock.dividends = dividendService.filterDividendsByOwnership(dividendsData, stock.ownershipPeriods)
-        stock.dividends = dividendService.calculateDividendsBasedOnOwnership(stock.dividends!!, stock.ownershipPeriods)
-
-        stock = dividendService.updateUsdPlnRateForDividends(stock)
-        stock.totalDividendValue = dividendService.calculateTotalDividends(stock.dividends!!)
-        stock = dividendService.calculateTaxToBePaidInPoland(stock)
-        stock = dividendService.calculateTotalWithholdingTaxPaid(stock)
-
-        return stock
-    }
-
-    private fun corsHeaders(): Map<String, String> {
-        return mapOf(
-            "Access-Control-Allow-Origin" to "https://main.d1kexow7pbduqr.amplifyapp.com",
-            "Access-Control-Allow-Methods" to "OPTIONS,POST",
-            "Access-Control-Allow-Headers" to "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
-        )
-    }
+    private fun corsHeaders(): Map<String, String> = mapOf(
+        "Access-Control-Allow-Origin" to "https://main.d1kexow7pbduqr.amplifyapp.com",
+        "Access-Control-Allow-Methods" to "OPTIONS,POST",
+        "Access-Control-Allow-Headers" to "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+    )
 }
