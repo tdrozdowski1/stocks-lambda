@@ -29,7 +29,8 @@ data class DividendDetail(
     var usdPlnRate: BigDecimal,
     var withholdingTaxPaid: BigDecimal,
     var dividendInPln: BigDecimal,
-    var taxDueInPoland: BigDecimal
+    var taxDueInPoland: BigDecimal,
+    val currency: String = "USD"
 )
 data class CashFlowData(val date: String, val dividendsPaid: BigDecimal, val freeCashFlow: BigDecimal)
 data class LiabilitiesData(val date: String, val totalLiabilities: BigDecimal, val totalAssets: BigDecimal, val totalEquity: BigDecimal, val totalDebt: BigDecimal)

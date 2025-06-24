@@ -19,6 +19,12 @@ class DividendService(
     private val baseUrl: String = System.getenv("FINANCIAL_MODELING_BASE_URL") ?: "https://financialmodelingprep.com/api/v3"
 ) {
 
+    private val USD_CURRENCY = "USD";
+    private val PLN_CURRENCY = "PLN";
+    private val USD_PLN_EXCHANGE_RATE_DEFAULT = "4.0";
+    private val WITHOLDING_TAX_DEFAULT = "0.15";
+    private val POLAND_TAX_DEFAULT = "0.19";
+
     fun processDividends(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
         return dividends.filter { dividend ->
             safeParseDate(dividend.date)?.let { dividendDate ->
@@ -37,11 +43,19 @@ class DividendService(
             }
 
             val quantity = matchingPeriod?.quantity ?: BigDecimal.ZERO
-            val totalDividend = quantity * dividend.dividend
-            val usdPlnRate = getHistoricalExchangeRate(paymentDate.minusDays(1)) ?: BigDecimal("4.0")
-            val withholdingTaxPaid = dividend.dividend * BigDecimal("0.15")
-            val dividendInPln = dividend.dividend * usdPlnRate
-            val taxDueInPoland = dividendInPln * BigDecimal("0.19") - withholdingTaxPaid * usdPlnRate
+            val dividendInUsd = if (dividend.currency != USD_CURRENCY) {
+                val exchangeRateToUsd = getHistoricalExchangeRate(dividend.currency, USD_CURRENCY, paymentDate.minusDays(1))
+                    ?: BigDecimal.ONE
+                dividend.dividend * exchangeRateToUsd
+            } else {
+                dividend.dividend
+            }
+            val totalDividend = quantity * dividendInUsd
+
+            val usdPlnRate = getHistoricalExchangeRate(USD_CURRENCY, PLN_CURRENCY, paymentDate.minusDays(1)) ?: BigDecimal(USD_PLN_EXCHANGE_RATE_DEFAULT)
+            val withholdingTaxPaid = dividendInUsd * BigDecimal(WITHOLDING_TAX_DEFAULT)
+            val dividendInPln = dividendInUsd * usdPlnRate
+            val taxDueInPoland = dividendInPln * BigDecimal(POLAND_TAX_DEFAULT) - withholdingTaxPaid * usdPlnRate
 
             dividend.copy(
                 quantity = quantity,
@@ -49,7 +63,8 @@ class DividendService(
                 usdPlnRate = usdPlnRate,
                 withholdingTaxPaid = withholdingTaxPaid,
                 dividendInPln = dividendInPln,
-                taxDueInPoland = taxDueInPoland
+                taxDueInPoland = taxDueInPoland,
+                dividend = dividendInUsd
             )
         }
     }
@@ -66,8 +81,9 @@ class DividendService(
         return dividends.sumOf { it.withholdingTaxPaid * it.quantity }
     }
 
-    private fun getHistoricalExchangeRate(date: LocalDate): BigDecimal? {
-        val url = "$baseUrl/historical-price-full/USDPLN?from=$date&to=$date&apikey=$apiKey"
+    private fun getHistoricalExchangeRate(fromCurrency: String, toCurrency: String, date: LocalDate): BigDecimal? {
+        val currencyPair = "$fromCurrency$toCurrency"
+        val url = "$baseUrl/historical-price-full/$currencyPair?from=$date&to=$date&apikey=$apiKey"
         val request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         val root = objectMapper.readTree(response.body())
@@ -75,7 +91,7 @@ class DividendService(
             ?: return null
 
         val rate = historical[0].get("close")?.asDouble()?.toBigDecimal()
-        return rate?.also { println("✅ Found USD/PLN rate for $date: $it") }
+        return rate?.also { println("✅ Found $currencyPair rate for $date: $it") }
     }
 
     private fun safeParseDate(dateStr: String): LocalDate? {

@@ -78,8 +78,9 @@ class DividendServiceTest {
             adjDividend = BigDecimal("0.5"),
             dividend = BigDecimal("0.5"),
             recordDate = "2024-12-09",
-            paymentDate = "2024-12-10",
+            paymentDate = "2024-12-31",
             declarationDate = "2024-12-01",
+            currency = "USD",
             quantity = BigDecimal.ZERO,
             totalDividend = BigDecimal.ZERO,
             usdPlnRate = BigDecimal.ZERO,
@@ -93,21 +94,28 @@ class DividendServiceTest {
             quantity = BigDecimal("14")
         )
 
-        // Stock objects for different stages
-        val initialStock = Stock(
-            symbol = "PEP",
-            transactions = listOf(transaction),
-            currentPrice = BigDecimal.ONE,
-            moneyInvested = BigDecimal.ZERO,
-            ownershipPeriods = emptyList()
+        // Processed dividend with expected values
+        val processedDividend = dividend.copy(
+            quantity = BigDecimal("14"),
+            totalDividend = BigDecimal("7.0"),
+            usdPlnRate = BigDecimal("4.0"),
+            withholdingTaxPaid = BigDecimal("0.075"), // 0.5 * 0.15
+            dividendInPln = BigDecimal("2.0"), // 0.5 * 4.0
+            taxDueInPoland = BigDecimal("0.305"), // (2.0 * 0.19) - (0.075 * 4.0)
+            dividend = BigDecimal("0.5")
         )
+
+        // Stock object
         val stock = Stock(
             symbol = "PEP",
             transactions = listOf(transaction),
-            currentPrice = null,
-            moneyInvested = BigDecimal.ZERO,
-            ownershipPeriods = emptyList()
-
+            currentPrice = BigDecimal.ONE,
+            moneyInvested = BigDecimal("15"),
+            ownershipPeriods = listOf(ownershipPeriod),
+            dividends = listOf(processedDividend),
+            totalDividendValue = BigDecimal("7.0"),
+            taxToBePaidInPoland = BigDecimal("4.27"), // 0.305 * 14
+            totalWithholdingTaxPaid = BigDecimal("1.05") // 0.075 * 14
         )
 
         // Mock dependencies
@@ -116,17 +124,10 @@ class DividendServiceTest {
         whenever(financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))).thenReturn(listOf(ownershipPeriod))
         whenever(financialModelingService.getStockPrice("PEP")).thenReturn(BigDecimal.ONE)
         whenever(financialModelingService.getDividends("PEP")).thenReturn(listOf(dividend))
-        whenever(dividendService.calculateDividendsBasedOnOwnership(listOf(dividend), listOf(ownershipPeriod))).thenReturn(
-            listOf(dividend.copy(quantity = BigDecimal("14"), totalDividend = BigDecimal("7.0")))
-        )
-        // Stub for empty dividends list
-        whenever(dividendService.calculateTotalDividends(emptyList())).thenReturn(BigDecimal.ZERO)
-        // Stub for processed dividends
-        whenever(dividendService.calculateTotalDividends(listOf(dividend.copy(quantity = BigDecimal("14"), totalDividend = BigDecimal("7.0"))))).thenReturn(BigDecimal("7.0"))
-        whenever(dividendService.updateUsdPlnRateForDividends(initialStock)).thenReturn(initialStock)
-        whenever(dividendService.updateUsdPlnRateForDividends(stock)).thenReturn(stock)
-        whenever(dividendService.calculateTaxToBePaidInPoland(stock)).thenReturn(stock)
-        whenever(dividendService.calculateTotalWithholdingTaxPaid(stock)).thenReturn(stock)
+        whenever(dividendService.processDividends(listOf(dividend), listOf(ownershipPeriod))).thenReturn(listOf(processedDividend))
+        whenever(dividendService.calculateTotalDividends(listOf(processedDividend))).thenReturn(BigDecimal("7.0"))
+        whenever(dividendService.calculateTaxToBePaidInPoland(listOf(processedDividend))).thenReturn(BigDecimal("4.27"))
+        whenever(dividendService.calculateTotalWithholdingTaxPaid(listOf(processedDividend))).thenReturn(BigDecimal("1.05"))
 
         // Act
         val response = handler.handleRequest(input, context)
@@ -148,5 +149,7 @@ class DividendServiceTest {
         assertEquals(BigDecimal("14"), returnedStock.dividends?.get(0)?.quantity)
         assertEquals(BigDecimal("7.0"), returnedStock.dividends?.get(0)?.totalDividend)
         assertEquals(BigDecimal("7.0"), returnedStock.totalDividendValue)
+        assertEquals(BigDecimal("4.27"), returnedStock.taxToBePaidInPoland)
+        assertEquals(BigDecimal("1.05"), returnedStock.totalWithholdingTaxPaid)
     }
 }
