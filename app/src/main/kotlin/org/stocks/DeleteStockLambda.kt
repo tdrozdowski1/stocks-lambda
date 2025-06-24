@@ -11,6 +11,9 @@ class DeleteStockLambdaHandler : RequestHandler<Map<String, Any>, Map<String, An
     private val objectMapper = jacksonObjectMapper()
 
 override fun handleRequest(event: Map<String, Any>, context: Context): Map<String, Any> {
+    val logger = context.logger
+    logger.log("Received event: ${objectMapper.writeValueAsString(event)}\n")
+
     if (event["httpMethod"] == "OPTIONS") {
         return mapOf(
             "statusCode" to 200,
@@ -22,15 +25,18 @@ override fun handleRequest(event: Map<String, Any>, context: Context): Map<Strin
     val pathParams = event["pathParameters"] as? Map<String, Any>
     val symbol = pathParams?.get("symbol") as? String
     if (symbol.isNullOrBlank()) {
+        logger.log("Error: Symbol is null or blank\n")
         return errorResponse("Invalid request", "Symbol must be provided in path")
     }
 
+    logger.log("Deleting stock with symbol: $symbol\n")
     val deleteRequest = DeleteItemRequest.builder()
         .tableName("Stocks")
         .key(mapOf("symbol" to software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().s(symbol).build()))
         .build()
 
     dynamoDbClient.deleteItem(deleteRequest)
+    logger.log("Stock deleted successfully for symbol: $symbol\n")
     return successResponse(mapOf("message" to "Stock deleted successfully", "symbol" to symbol))
 }
 
