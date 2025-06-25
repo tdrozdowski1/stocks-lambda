@@ -1,9 +1,9 @@
 package org.stocks.transactions.services
 
-import OwnershipPeriod
-import Transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.stocks.transactions.OwnershipPeriod
+import org.stocks.transactions.Transaction
 import java.math.BigDecimal
 
 class FinancialCalculationsServiceOwnershipPeriodsTest {

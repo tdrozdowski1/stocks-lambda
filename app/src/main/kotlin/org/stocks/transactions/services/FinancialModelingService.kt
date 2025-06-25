@@ -1,8 +1,8 @@
 package org.stocks.transactions.services
 
-import DividendDetail
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import org.stocks.transactions.DividendDetail
 import java.math.BigDecimal
 import java.net.URI
 import java.net.http.HttpClient
@@ -41,13 +41,7 @@ class FinancialModelingService(
                 dividend = it["dividend"].decimalValue(),
                 recordDate = it["recordDate"].asText(),
                 paymentDate = it["paymentDate"].asText(),
-                declarationDate = it["declarationDate"].asText(),
-                quantity = BigDecimal.ZERO,
-                totalDividend = BigDecimal.ZERO,
-                usdPlnRate = BigDecimal.ZERO,
-                withholdingTaxPaid = BigDecimal.ZERO,
-                dividendInPln = BigDecimal.ZERO,
-                taxDueInPoland = BigDecimal.ZERO
+                declarationDate = it["declarationDate"].asText()
             )
         }
     }

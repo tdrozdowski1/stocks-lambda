@@ -1,11 +1,11 @@
 package com.stocks
 
-import Stock
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.stocks.db.DbService
+import org.stocks.transactions.Stock
 
 class SaveStockLambdaHandler(
     private val dbService: DbService = DbService()

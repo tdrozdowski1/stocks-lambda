@@ -1,7 +1,5 @@
 package org.stocks.transactions
 
-import Stock
-import Transaction
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -39,7 +37,7 @@ class TransactionLambdaHandler(
 
     private fun processTransaction(transaction: Transaction): Stock {
         val currentStocks = dbService.getStocks()
-        val stock = currentStocks.find { it.symbol == transaction.symbol }?.let { existingStock ->
+        val stock = currentStocks.find { it.symbol == transaction.symbol }?.let { existingStock: Stock ->
             updateExistingStock(existingStock, transaction)
         } ?: createNewStock(transaction)
 

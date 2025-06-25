@@ -1,8 +1,7 @@
 package org.stocks.transactions.services
 
-
-import OwnershipPeriod
-import Transaction
+import org.stocks.transactions.OwnershipPeriod
+import org.stocks.transactions.Transaction
 import java.math.BigDecimal
 import java.time.LocalDate
 

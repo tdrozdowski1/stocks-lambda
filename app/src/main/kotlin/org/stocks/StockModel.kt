@@ -1,3 +1,5 @@
+package org.stocks.transactions
+
 import java.math.BigDecimal
 
 data class Stock(
@@ -15,7 +17,9 @@ data class Stock(
 )
 
 data class OwnershipPeriod(val startDate: String, val endDate: String?, val quantity: BigDecimal)
+
 data class Transaction(val symbol: String, val date: String, val type: String, val amount: BigDecimal, val price: BigDecimal, val commission: BigDecimal)
+
 data class DividendDetail(
     val date: String,
     val label: String,
@@ -24,13 +28,15 @@ data class DividendDetail(
     val recordDate: String,
     val paymentDate: String,
     val declarationDate: String,
-    val quantity: BigDecimal,
-    val totalDividend: BigDecimal,
-    var usdPlnRate: BigDecimal,
-    var withholdingTaxPaid: BigDecimal,
-    var dividendInPln: BigDecimal,
-    var taxDueInPoland: BigDecimal,
+    val quantity: BigDecimal? = null,
+    val totalDividend: BigDecimal? = null,
+    val usdPlnRate: BigDecimal? = null,
+    val withholdingTaxPaid: BigDecimal? = null,
+    val dividendInPln: BigDecimal? = null,
+    val taxDueInPoland: BigDecimal? = null,
     val currency: String = "USD"
 )
+
 data class CashFlowData(val date: String, val dividendsPaid: BigDecimal, val freeCashFlow: BigDecimal)
+
 data class LiabilitiesData(val date: String, val totalLiabilities: BigDecimal, val totalAssets: BigDecimal, val totalEquity: BigDecimal, val totalDebt: BigDecimal)

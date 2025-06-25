@@ -1,7 +1,7 @@
 package org.stocks.transactions.services
 
-import DividendDetail
-import OwnershipPeriod
+import org.stocks.transactions.DividendDetail
+import org.stocks.transactions.OwnershipPeriod
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigDecimal
@@ -75,16 +75,16 @@ class DividendService(
     }
 
     fun calculateTotalDividends(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { it.totalDividend }.setScale(SCALE, ROUNDING_MODE)
+        return dividends.sumOf { it.totalDividend ?: BigDecimal.ZERO }.setScale(SCALE, ROUNDING_MODE)
     }
 
     fun calculateTaxToBePaidInPoland(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { (it.taxDueInPoland * it.quantity).setScale(SCALE, ROUNDING_MODE) }
+        return dividends.sumOf { (it.taxDueInPoland ?: BigDecimal.ZERO) * (it.quantity ?: BigDecimal.ZERO) }
             .setScale(SCALE, ROUNDING_MODE)
     }
 
     fun calculateTotalWithholdingTaxPaid(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { (it.withholdingTaxPaid * it.quantity).setScale(SCALE, ROUNDING_MODE) }
+        return dividends.sumOf { (it.withholdingTaxPaid ?: BigDecimal.ZERO) * (it.quantity ?: BigDecimal.ZERO) }
             .setScale(SCALE, ROUNDING_MODE)
     }
 

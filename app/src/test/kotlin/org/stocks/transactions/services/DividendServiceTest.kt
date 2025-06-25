@@ -1,7 +1,5 @@
 package org.stocks.transactions.services
 
-import DividendDetail
-import OwnershipPeriod
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,6 +10,8 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
 import org.mockito.kotlin.whenever
+import org.stocks.transactions.DividendDetail
+import org.stocks.transactions.OwnershipPeriod
 import java.math.BigDecimal
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

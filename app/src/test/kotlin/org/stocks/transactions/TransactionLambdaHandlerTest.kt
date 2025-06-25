@@ -11,7 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.whenever
 import org.stocks.db.DbService
-import org.stocks.transactions.TransactionLambdaHandler
+import org.stocks.transactions.*
 import org.stocks.transactions.services.DividendService
 import org.stocks.transactions.services.FinancialCalculationsService
 import org.stocks.transactions.services.FinancialModelingService
@@ -103,19 +103,6 @@ class TransactionLambdaHandlerTest {
             dividendInPln = BigDecimal("2.0"), // 0.5 * 4.0
             taxDueInPoland = BigDecimal("0.305"), // (2.0 * 0.19) - (0.075 * 4.0)
             dividend = BigDecimal("0.5")
-        )
-
-        // Stock object
-        val stock = Stock(
-            symbol = "PEP",
-            transactions = listOf(transaction),
-            currentPrice = BigDecimal.ONE,
-            moneyInvested = BigDecimal("15"),
-            ownershipPeriods = listOf(ownershipPeriod),
-            dividends = listOf(processedDividend),
-            totalDividendValue = BigDecimal("7.0"),
-            taxToBePaidInPoland = BigDecimal("4.27"), // 0.305 * 14
-            totalWithholdingTaxPaid = BigDecimal("1.05") // 0.075 * 14
         )
 
         // Mock dependencies
