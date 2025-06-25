@@ -5,6 +5,7 @@ import OwnershipPeriod
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -19,11 +20,13 @@ class DividendService(
     private val baseUrl: String = System.getenv("FINANCIAL_MODELING_BASE_URL") ?: "https://financialmodelingprep.com/api/v3"
 ) {
 
-    private val USD_CURRENCY = "USD";
-    private val PLN_CURRENCY = "PLN";
-    private val USD_PLN_EXCHANGE_RATE_DEFAULT = "4.0";
-    private val WITHOLDING_TAX_DEFAULT = "0.15";
-    private val POLAND_TAX_DEFAULT = "0.19";
+    private val USD_CURRENCY = "USD"
+    private val PLN_CURRENCY = "PLN"
+    private val USD_PLN_EXCHANGE_RATE_DEFAULT = BigDecimal("4.00")
+    private val WITHOLDING_TAX_DEFAULT = BigDecimal("0.15")
+    private val POLAND_TAX_DEFAULT = BigDecimal("0.19")
+    private val SCALE = 2
+    private val ROUNDING_MODE = RoundingMode.HALF_UP
 
     fun processDividends(dividends: List<DividendDetail>, ownershipPeriods: List<OwnershipPeriod>): List<DividendDetail> {
         return dividends.filter { dividend ->
@@ -46,21 +49,23 @@ class DividendService(
             val dividendInUsd = if (dividend.currency != USD_CURRENCY) {
                 val exchangeRateToUsd = getHistoricalExchangeRate(dividend.currency, USD_CURRENCY, paymentDate.minusDays(1))
                     ?: BigDecimal.ONE
-                dividend.dividend * exchangeRateToUsd
+                (dividend.dividend * exchangeRateToUsd).setScale(SCALE, ROUNDING_MODE)
             } else {
-                dividend.dividend
+                dividend.dividend.setScale(SCALE, ROUNDING_MODE)
             }
-            val totalDividend = quantity * dividendInUsd
+            val totalDividend = (quantity * dividendInUsd).setScale(SCALE, ROUNDING_MODE)
 
-            val usdPlnRate = getHistoricalExchangeRate(USD_CURRENCY, PLN_CURRENCY, paymentDate.minusDays(1)) ?: BigDecimal(USD_PLN_EXCHANGE_RATE_DEFAULT)
-            val withholdingTaxPaid = dividendInUsd * BigDecimal(WITHOLDING_TAX_DEFAULT)
-            val dividendInPln = dividendInUsd * usdPlnRate
-            val taxDueInPoland = dividendInPln * BigDecimal(POLAND_TAX_DEFAULT) - withholdingTaxPaid * usdPlnRate
+            val usdPlnRate = getHistoricalExchangeRate(USD_CURRENCY, PLN_CURRENCY, paymentDate.minusDays(1))
+                ?: USD_PLN_EXCHANGE_RATE_DEFAULT
+            val withholdingTaxPaid = (dividendInUsd * WITHOLDING_TAX_DEFAULT).setScale(SCALE, ROUNDING_MODE)
+            val dividendInPln = (dividendInUsd * usdPlnRate).setScale(SCALE, ROUNDING_MODE)
+            val taxDueInPoland = (dividendInPln * POLAND_TAX_DEFAULT - withholdingTaxPaid * usdPlnRate)
+                .setScale(SCALE, ROUNDING_MODE)
 
             dividend.copy(
                 quantity = quantity,
                 totalDividend = totalDividend,
-                usdPlnRate = usdPlnRate,
+                usdPlnRate = usdPlnRate.setScale(SCALE, ROUNDING_MODE),
                 withholdingTaxPaid = withholdingTaxPaid,
                 dividendInPln = dividendInPln,
                 taxDueInPoland = taxDueInPoland,
@@ -70,15 +75,17 @@ class DividendService(
     }
 
     fun calculateTotalDividends(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { it.totalDividend }
+        return dividends.sumOf { it.totalDividend }.setScale(SCALE, ROUNDING_MODE)
     }
 
     fun calculateTaxToBePaidInPoland(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { it.taxDueInPoland * it.quantity }
+        return dividends.sumOf { (it.taxDueInPoland * it.quantity).setScale(SCALE, ROUNDING_MODE) }
+            .setScale(SCALE, ROUNDING_MODE)
     }
 
     fun calculateTotalWithholdingTaxPaid(dividends: List<DividendDetail>): BigDecimal {
-        return dividends.sumOf { it.withholdingTaxPaid * it.quantity }
+        return dividends.sumOf { (it.withholdingTaxPaid * it.quantity).setScale(SCALE, ROUNDING_MODE) }
+            .setScale(SCALE, ROUNDING_MODE)
     }
 
     private fun getHistoricalExchangeRate(fromCurrency: String, toCurrency: String, date: LocalDate): BigDecimal? {
@@ -91,7 +98,7 @@ class DividendService(
             ?: return null
 
         val rate = historical[0].get("close")?.asDouble()?.toBigDecimal()
-        return rate?.also { println("✅ Found $currencyPair rate for $date: $it") }
+        return rate?.setScale(SCALE, ROUNDING_MODE)?.also { println("✅ Found $currencyPair rate for $date: $it") }
     }
 
     private fun safeParseDate(dateStr: String): LocalDate? {

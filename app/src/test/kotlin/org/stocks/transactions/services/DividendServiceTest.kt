@@ -1,155 +1,365 @@
-import com.amazonaws.services.lambda.runtime.Context
-import com.amazonaws.services.lambda.runtime.LambdaLogger
+package org.stocks.transactions.services
+
+import DividendDetail
+import OwnershipPeriod
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.Mock
-import org.mockito.junit.jupiter.MockitoExtension
-import org.mockito.kotlin.any
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.eq
+import org.mockito.Mockito.mock
 import org.mockito.kotlin.whenever
-import org.stocks.db.DbService
-import org.stocks.transactions.TransactionLambdaHandler
-import org.stocks.transactions.services.DividendService
-import org.stocks.transactions.services.FinancialCalculationsService
-import org.stocks.transactions.services.FinancialModelingService
 import java.math.BigDecimal
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 
-@ExtendWith(MockitoExtension::class)
 class DividendServiceTest {
 
-    @Mock
-    private lateinit var context: Context
-
-    @Mock
-    private lateinit var lambdaLogger: LambdaLogger
-
-    @Mock
-    private lateinit var financialModelingService: FinancialModelingService
-
-    @Mock
-    private lateinit var financialCalculationsService: FinancialCalculationsService
-
-    @Mock
     private lateinit var dividendService: DividendService
-
-    @Mock
-    private lateinit var dbService: DbService
-
+    private lateinit var httpClient: HttpClient
     private lateinit var objectMapper: ObjectMapper
-    private lateinit var handler: TransactionLambdaHandler
+
+    private val exchangeRates = mapOf(
+        "2023-11-30" to BigDecimal("4.40"),
+        "2023-10-31" to BigDecimal("4.10"),
+        "2022-10-31" to BigDecimal("4.00"),
+        "2022-11-01" to BigDecimal("4.05"),
+        "2023-12-01" to BigDecimal("4.50"),
+        "2023-11-01" to BigDecimal("4.20"),
+        "2024-01-09" to BigDecimal("4.30")
+    )
 
     @BeforeEach
     fun setUp() {
+        httpClient = mock()
         objectMapper = jacksonObjectMapper()
-        whenever(context.logger).thenReturn(lambdaLogger)
-        whenever(lambdaLogger.log(any<String>())).thenAnswer { /* No-op */ }
-        handler = TransactionLambdaHandler(
-            financialModelingService,
-            financialCalculationsService,
-            dividendService,
-            dbService,
-            objectMapper
-        )
+        dividendService = DividendService(httpClient, objectMapper, apiKey = "test-api-key")
+
+        whenever(
+            httpClient.send(
+                any<HttpRequest>(),
+                eq(HttpResponse.BodyHandlers.ofString())
+            )
+        ).thenAnswer { invocation ->
+            val request = invocation.getArgument<HttpRequest>(0)
+            val uri = request.uri().toString()
+
+            // Extract 'from' date from URL
+            val dateRegex = Regex("""[?&]from=(\d{4}-\d{2}-\d{2})""")
+            val match = dateRegex.find(uri)
+            val date = match?.groupValues?.get(1)
+                ?: throw RuntimeException("❌ No 'from' date found in URI: $uri")
+
+            val rate = exchangeRates[date]
+                ?: throw RuntimeException("❌ No exchange rate found for date $date")
+
+            val responseBody = """
+                {
+                  "historical": [
+                    { "date": "$date", "close": $rate }
+                  ]
+                }
+            """.trimIndent()
+
+            mock<HttpResponse<String>>().apply {
+                whenever(body()).thenReturn(responseBody)
+            }
+        }
     }
 
-    @Test
-    fun `should handle valid POST request and return stock response with dividends`() {
-        // Arrange
-        val transaction = Transaction(
-            symbol = "PEP",
-            date = "2024-12-09",
-            type = "buy",
-            amount = BigDecimal("14"),
-            price = BigDecimal("1"),
-            commission = BigDecimal("1")
-        )
-        val input = mapOf(
-            "httpMethod" to "POST",
-            "body" to objectMapper.writeValueAsString(transaction)
-        )
+    @Nested
+    inner class ProcessDividendsTests {
+        @Test
+        fun `should filter dividends based on ownership periods and calculate taxes`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "USD",
+                    quantity = BigDecimal.ZERO,
+                    totalDividend = BigDecimal.ZERO,
+                    usdPlnRate = BigDecimal.ZERO,
+                    withholdingTaxPaid = BigDecimal.ZERO,
+                    dividendInPln = BigDecimal.ZERO,
+                    taxDueInPoland = BigDecimal.ZERO
+                ),
+                DividendDetail(
+                    date = "2023-10-10",
+                    label = "Oct Dividend",
+                    adjDividend = BigDecimal("2.00"),
+                    dividend = BigDecimal("2.00"),
+                    recordDate = "2023-10-09",
+                    paymentDate = "2023-10-31",
+                    declarationDate = "2023-10-01",
+                    currency = "USD",
+                    quantity = BigDecimal.ZERO,
+                    totalDividend = BigDecimal.ZERO,
+                    usdPlnRate = BigDecimal.ZERO,
+                    withholdingTaxPaid = BigDecimal.ZERO,
+                    dividendInPln = BigDecimal.ZERO,
+                    taxDueInPoland = BigDecimal.ZERO
+                )
+            )
+            val ownershipPeriods = listOf(
+                OwnershipPeriod(
+                    startDate = "2024-01-01",
+                    endDate = "2024-01-15",
+                    quantity = BigDecimal("10.00")
+                )
+            )
 
-        // Sample dividend and ownership period
-        val dividend = DividendDetail(
-            date = "2024-12-10",
-            label = "Q4 Dividend",
-            adjDividend = BigDecimal("0.5"),
-            dividend = BigDecimal("0.5"),
-            recordDate = "2024-12-09",
-            paymentDate = "2024-12-31",
-            declarationDate = "2024-12-01",
-            currency = "USD",
-            quantity = BigDecimal.ZERO,
-            totalDividend = BigDecimal.ZERO,
-            usdPlnRate = BigDecimal.ZERO,
-            withholdingTaxPaid = BigDecimal.ZERO,
-            dividendInPln = BigDecimal.ZERO,
-            taxDueInPoland = BigDecimal.ZERO
-        )
-        val ownershipPeriod = OwnershipPeriod(
-            startDate = "2024-12-01",
-            endDate = null,
-            quantity = BigDecimal("14")
-        )
+            val processedDividends = dividendService.processDividends(dividends, ownershipPeriods)
 
-        // Processed dividend with expected values
-        val processedDividend = dividend.copy(
-            quantity = BigDecimal("14"),
-            totalDividend = BigDecimal("7.0"),
-            usdPlnRate = BigDecimal("4.0"),
-            withholdingTaxPaid = BigDecimal("0.075"), // 0.5 * 0.15
-            dividendInPln = BigDecimal("2.0"), // 0.5 * 4.0
-            taxDueInPoland = BigDecimal("0.305"), // (2.0 * 0.19) - (0.075 * 4.0)
-            dividend = BigDecimal("0.5")
-        )
+            assertEquals(1, processedDividends.size)
+            val dividend = processedDividends[0]
+            assertEquals("2024-01-10", dividend.paymentDate)
+            assertEquals(BigDecimal("10.00"), dividend.quantity)
+            assertEquals(BigDecimal("1.50"), dividend.dividend)
+            assertEquals(BigDecimal("15.00"), dividend.totalDividend)
+            assertEquals(BigDecimal("4.30"), dividend.usdPlnRate)
+            assertEquals(BigDecimal("0.23"), dividend.withholdingTaxPaid) // 1.50 * 0.15 = 0.225 -> 0.23
+            assertEquals(BigDecimal("6.45"), dividend.dividendInPln) // 1.50 * 4.30 = 6.45
+            assertEquals(BigDecimal("0.24"), dividend.taxDueInPoland) // (6.45 * 0.19) - (0.23 * 4.30) = 1.2255 - 0.989 = 0.2365 -> 0.24
+        }
 
-        // Stock object
-        val stock = Stock(
-            symbol = "PEP",
-            transactions = listOf(transaction),
-            currentPrice = BigDecimal.ONE,
-            moneyInvested = BigDecimal("15"),
-            ownershipPeriods = listOf(ownershipPeriod),
-            dividends = listOf(processedDividend),
-            totalDividendValue = BigDecimal("7.0"),
-            taxToBePaidInPoland = BigDecimal("4.27"), // 0.305 * 14
-            totalWithholdingTaxPaid = BigDecimal("1.05") // 0.075 * 14
-        )
+        @Test
+        fun `should handle non-USD dividends with exchange rate conversion`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "EUR",
+                    quantity = BigDecimal.ZERO,
+                    totalDividend = BigDecimal.ZERO,
+                    usdPlnRate = BigDecimal.ZERO,
+                    withholdingTaxPaid = BigDecimal.ZERO,
+                    dividendInPln = BigDecimal.ZERO,
+                    taxDueInPoland = BigDecimal.ZERO
+                )
+            )
+            val ownershipPeriods = listOf(
+                OwnershipPeriod(
+                    startDate = "2024-01-01",
+                    endDate = "2024-01-15",
+                    quantity = BigDecimal("10.00")
+                )
+            )
 
-        // Mock dependencies
-        whenever(dbService.getStocks()).thenReturn(emptyList())
-        whenever(financialCalculationsService.calculateMoneyInvested(listOf(transaction))).thenReturn(BigDecimal("15"))
-        whenever(financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))).thenReturn(listOf(ownershipPeriod))
-        whenever(financialModelingService.getStockPrice("PEP")).thenReturn(BigDecimal.ONE)
-        whenever(financialModelingService.getDividends("PEP")).thenReturn(listOf(dividend))
-        whenever(dividendService.processDividends(listOf(dividend), listOf(ownershipPeriod))).thenReturn(listOf(processedDividend))
-        whenever(dividendService.calculateTotalDividends(listOf(processedDividend))).thenReturn(BigDecimal("7.0"))
-        whenever(dividendService.calculateTaxToBePaidInPoland(listOf(processedDividend))).thenReturn(BigDecimal("4.27"))
-        whenever(dividendService.calculateTotalWithholdingTaxPaid(listOf(processedDividend))).thenReturn(BigDecimal("1.05"))
+            // Mock EUR to USD rate
+            whenever(
+                httpClient.send(
+                    any<HttpRequest>(),
+                    eq(HttpResponse.BodyHandlers.ofString())
+                )
+            ).thenAnswer { invocation ->
+                val request = invocation.getArgument<HttpRequest>(0)
+                val uri = request.uri().toString()
+                val responseBody = if (uri.contains("EURUSD")) {
+                    """
+                    {
+                      "historical": [
+                        { "date": "2024-01-09", "close": 1.10 }
+                      ]
+                    }
+                    """.trimIndent()
+                } else {
+                    """
+                    {
+                      "historical": [
+                        { "date": "2024-01-09", "close": 4.30 }
+                      ]
+                    }
+                    """.trimIndent()
+                }
 
-        // Act
-        val response = handler.handleRequest(input, context)
+                mock<HttpResponse<String>>().apply {
+                    whenever(body()).thenReturn(responseBody)
+                }
+            }
 
-        // Assert
-        assertEquals(200, response["statusCode"])
-        val headers = response["headers"] as Map<String, String>
-        assertEquals("https://main.d1kexow7pbduqr.amplifyapp.com", headers["Access-Control-Allow-Origin"])
-        assertEquals("OPTIONS,POST", headers["Access-Control-Allow-Methods"])
-        assertEquals("Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token", headers["Access-Control-Allow-Headers"])
+            val processedDividends = dividendService.processDividends(dividends, ownershipPeriods)
 
-        val responseBody = response["body"] as String
-        val returnedStock = objectMapper.readValue(responseBody, Stock::class.java)
-        assertEquals("PEP", returnedStock.symbol)
-        assertEquals(BigDecimal.ONE, returnedStock.currentPrice)
-        assertEquals(1, returnedStock.transactions.size)
-        assertEquals(transaction, returnedStock.transactions[0])
-        assertEquals(1, returnedStock.dividends?.size)
-        assertEquals(BigDecimal("14"), returnedStock.dividends?.get(0)?.quantity)
-        assertEquals(BigDecimal("7.0"), returnedStock.dividends?.get(0)?.totalDividend)
-        assertEquals(BigDecimal("7.0"), returnedStock.totalDividendValue)
-        assertEquals(BigDecimal("4.27"), returnedStock.taxToBePaidInPoland)
-        assertEquals(BigDecimal("1.05"), returnedStock.totalWithholdingTaxPaid)
+            assertEquals(1, processedDividends.size)
+            val dividend = processedDividends[0]
+            assertEquals(BigDecimal("1.65"), dividend.dividend) // 1.50 * 1.10 = 1.65
+            assertEquals(BigDecimal("16.50"), dividend.totalDividend) // 1.65 * 10 = 16.50
+            assertEquals(BigDecimal("4.30"), dividend.usdPlnRate)
+            assertEquals(BigDecimal("0.25"), dividend.withholdingTaxPaid) // 1.65 * 0.15 = 0.2475 -> 0.25
+            assertEquals(BigDecimal("7.10"), dividend.dividendInPln) // 1.65 * 4.30 = 7.095 -> 7.10
+            assertEquals(BigDecimal("0.27"), dividend.taxDueInPoland) // (7.10 * 0.19) - (0.25 * 4.30) = 1.349 - 1.075 = 0.274 -> 0.27
+        }
+
+        @Test
+        fun `should handle invalid dates gracefully`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "invalid-date",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "USD",
+                    quantity = BigDecimal.ZERO,
+                    totalDividend = BigDecimal.ZERO,
+                    usdPlnRate = BigDecimal.ZERO,
+                    withholdingTaxPaid = BigDecimal.ZERO,
+                    dividendInPln = BigDecimal.ZERO,
+                    taxDueInPoland = BigDecimal.ZERO
+                )
+            )
+            val ownershipPeriods = listOf(
+                OwnershipPeriod(
+                    startDate = "2024-01-01",
+                    endDate = "2024-01-15",
+                    quantity = BigDecimal("10.00")
+                )
+            )
+
+            val processedDividends = dividendService.processDividends(dividends, ownershipPeriods)
+
+            assertEquals(0, processedDividends.size)
+        }
+    }
+
+    @Nested
+    inner class CalculationTests {
+        @Test
+        fun `should calculate total dividends correctly`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "USD",
+                    quantity = BigDecimal("10.00"),
+                    totalDividend = BigDecimal("15.00"),
+                    usdPlnRate = BigDecimal("4.30"),
+                    withholdingTaxPaid = BigDecimal("0.23"),
+                    dividendInPln = BigDecimal("6.45"),
+                    taxDueInPoland = BigDecimal("0.26")
+                ),
+                DividendDetail(
+                    date = "2023-10-31",
+                    label = "Oct Dividend",
+                    adjDividend = BigDecimal("2.00"),
+                    dividend = BigDecimal("2.00"),
+                    recordDate = "2023-10-30",
+                    paymentDate = "2023-10-31",
+                    declarationDate = "2023-10-01",
+                    currency = "USD",
+                    quantity = BigDecimal("5.00"),
+                    totalDividend = BigDecimal("10.00"),
+                    usdPlnRate = BigDecimal("4.10"),
+                    withholdingTaxPaid = BigDecimal("0.30"),
+                    dividendInPln = BigDecimal("8.20"),
+                    taxDueInPoland = BigDecimal("0.29")
+                )
+            )
+
+            val totalDividends = dividendService.calculateTotalDividends(dividends)
+            assertEquals(BigDecimal("25.00"), totalDividends) // 15.00 + 10.00 = 25.00
+        }
+
+        @Test
+        fun `should calculate total withholding tax paid correctly`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "USD",
+                    quantity = BigDecimal("10.00"),
+                    totalDividend = BigDecimal("15.00"),
+                    usdPlnRate = BigDecimal("4.30"),
+                    withholdingTaxPaid = BigDecimal("0.23"),
+                    dividendInPln = BigDecimal("6.45"),
+                    taxDueInPoland = BigDecimal("0.26")
+                ),
+                DividendDetail(
+                    date = "2023-10-31",
+                    label = "Oct Dividend",
+                    adjDividend = BigDecimal("2.00"),
+                    dividend = BigDecimal("2.00"),
+                    recordDate = "2023-10-30",
+                    paymentDate = "2023-10-31",
+                    declarationDate = "2023-10-01",
+                    currency = "USD",
+                    quantity = BigDecimal("5.00"),
+                    totalDividend = BigDecimal("10.00"),
+                    usdPlnRate = BigDecimal("4.10"),
+                    withholdingTaxPaid = BigDecimal("0.30"),
+                    dividendInPln = BigDecimal("8.20"),
+                    taxDueInPoland = BigDecimal("0.29")
+                )
+            )
+
+            val totalWithholdingTax = dividendService.calculateTotalWithholdingTaxPaid(dividends)
+            assertEquals(BigDecimal("3.80"), totalWithholdingTax) // (0.23 * 10) + (0.30 * 5) = 2.30 + 1.50 = 3.80
+        }
+
+        @Test
+        fun `should calculate total tax due in Poland correctly`() {
+            val dividends = listOf(
+                DividendDetail(
+                    date = "2024-01-10",
+                    label = "Jan Dividend",
+                    adjDividend = BigDecimal("1.50"),
+                    dividend = BigDecimal("1.50"),
+                    recordDate = "2024-01-09",
+                    paymentDate = "2024-01-10",
+                    declarationDate = "2024-01-01",
+                    currency = "USD",
+                    quantity = BigDecimal("10.00"),
+                    totalDividend = BigDecimal("15.00"),
+                    usdPlnRate = BigDecimal("4.30"),
+                    withholdingTaxPaid = BigDecimal("0.23"),
+                    dividendInPln = BigDecimal("6.45"),
+                    taxDueInPoland = BigDecimal("0.26")
+                ),
+                DividendDetail(
+                    date = "2023-10-31",
+                    label = "Oct Dividend",
+                    adjDividend = BigDecimal("2.00"),
+                    dividend = BigDecimal("2.00"),
+                    recordDate = "2023-10-30",
+                    paymentDate = "2023-10-31",
+                    declarationDate = "2023-10-01",
+                    currency = "USD",
+                    quantity = BigDecimal("5.00"),
+                    totalDividend = BigDecimal("10.00"),
+                    usdPlnRate = BigDecimal("4.10"),
+                    withholdingTaxPaid = BigDecimal("0.30"),
+                    dividendInPln = BigDecimal("8.20"),
+                    taxDueInPoland = BigDecimal("0.29")
+                )
+            )
+
+            val totalTaxDue = dividendService.calculateTaxToBePaidInPoland(dividends)
+            assertEquals(BigDecimal("4.05"), totalTaxDue) // (0.26 * 10) + (0.29 * 5) = 2.60 + 1.45 = 4.05
+        }
     }
 }
