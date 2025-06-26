@@ -46,11 +46,6 @@ java {
     }
 }
 
-application {
-    // Define the main class for the application.
-    mainClass = "com.example.LambdaHandlerKt" // Ensure this matches the actual entry point of your app
-}
-
 // Create a task to build the JAR file with dependencies
 task<Jar>("fatJar") {
     archiveBaseName.set("lambda-app")
@@ -64,10 +59,6 @@ task<Jar>("fatJar") {
     }) {
         // Handle duplicate entries
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    }
-    
-    manifest {
-        attributes["Main-Class"] = "com.example.LambdaHandlerKt" // Adjust according to your handler's entry point
     }
 }
 
