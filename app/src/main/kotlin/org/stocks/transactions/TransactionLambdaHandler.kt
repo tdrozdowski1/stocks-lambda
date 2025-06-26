@@ -73,7 +73,7 @@ class TransactionLambdaHandler(
             totalDividendValue = dividendService.calculateTotalDividends(processedDividends),
             taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(processedDividends),
             totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(processedDividends)
-        ).also { dbService.updateStock(it) }
+        ).also { dbService.saveStock(it) }
     }
 
     private fun buildCorsResponse(statusCode: Int, body: String): Map<String, Any> {

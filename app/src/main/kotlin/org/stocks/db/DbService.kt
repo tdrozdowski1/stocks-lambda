@@ -17,7 +17,6 @@ class DbService(
     private val tableName = "Stocks"
 
     fun getStocks(): List<Stock> {
-        //TODO when do I need a single stock?
         val scanRequest = ScanRequest.builder()
             .tableName(tableName)
             .build()
@@ -48,22 +47,5 @@ class DbService(
             .build()
 
         dynamoDbClient.putItem(putRequest)
-    }
-
-    fun updateStock(stock: Stock) {
-        // Serialize the Stock object to JSON
-        val stockJson = objectMapper.writeValueAsString(stock)
-        // Create DynamoDB item with the stock's symbol as the partition key
-        val item = mapOf(
-            "symbol" to AttributeValue.builder().s(stock.symbol).build(),
-            "stockData" to AttributeValue.builder().s(stockJson).build()
-        )
-        // Build PutItem request to update the specific stock
-        val request = PutItemRequest.builder()
-            .tableName(tableName)
-            .item(item)
-            .build()
-        // Execute the update
-        dynamoDbClient.putItem(request)
     }
 }
