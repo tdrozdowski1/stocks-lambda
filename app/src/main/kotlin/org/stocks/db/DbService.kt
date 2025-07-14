@@ -7,7 +7,7 @@ import org.stocks.transactions.Stock
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
-import software.amazon.awssdk.services.dynamodb.model.ScanRequest
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest
 
 class DbService(
     private val dynamoDbClient: DynamoDbClient = DynamoDbClient.builder().build(),
@@ -16,16 +16,23 @@ class DbService(
 
     private val tableName = "Stocks"
 
-    fun getStocks(): List<Stock> {
-        val scanRequest = ScanRequest.builder()
+    fun getStocks(email: String): List<Stock> {
+        val queryRequest = QueryRequest.builder()
             .tableName(tableName)
+            .indexName(email)
+            .keyConditionExpression("email = :email")
+            .expressionAttributeValues(mapOf(":email" to AttributeValue.builder().s(email).build()))
             .build()
-        val response = dynamoDbClient.scan(scanRequest)
+
+        val response = dynamoDbClient.query(queryRequest)
         val items = response.items()
+
         return items.mapNotNull { item ->
             try {
                 val stockJson = item["stockData"]?.s() ?: return@mapNotNull null
-                objectMapper.readValue<Stock>(stockJson)
+                val emailFromItem = item["email"]?.s() ?: "unknown@example.com"
+                val stock = objectMapper.readValue<Stock>(stockJson)
+                stock.copy(email = emailFromItem)
             } catch (e: Exception) {
                 println("Error deserializing stock: ${e.message}")
                 null

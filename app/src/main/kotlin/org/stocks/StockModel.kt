@@ -4,6 +4,7 @@ import java.math.BigDecimal
 
 data class Stock(
     val symbol: String,
+    val email : String,
     val transactions: List<Transaction>,
     val moneyInvested: BigDecimal,
     val ownershipPeriods: List<OwnershipPeriod>,

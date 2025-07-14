@@ -4,9 +4,11 @@ import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import org.stocks.db.DbService
 import org.stocks.transactions.services.*
 
+@Suppress("UNCHECKED_CAST")
 class TransactionLambdaHandler(
     private val financialModelingService: FinancialModelingService = FinancialModelingService(),
     private val financialCalculationsService: FinancialCalculationsService = FinancialCalculationsService(),
@@ -25,9 +27,27 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "No transaction body provided")
 
+        // 🔒 Extract claims from requestContext.authorizer.claims.email
+        val email = try {
+            val requestContext = input["requestContext"] as? Map<*, *>
+            val authorizer = requestContext?.get("authorizer") as? Map<*, *>
+            val claims = authorizer?.get("claims") as? Map<*, *>
+            claims?.get("email") as? String ?: "unknown@example.com"
+        } catch (e: Exception) {
+            context.logger.log("⚠️ Failed to extract email from claims: ${e.message}")
+            "unknown@example.com"
+        }
+
         return runCatching {
-            val transaction = objectMapper.readValue(transactionJson, Transaction::class.java)
-            val stock = processTransaction(transaction)
+            // Your frontend wraps the transaction in a { body: "..." }
+            val transactionWrapper = objectMapper.readTree(transactionJson)
+            val transactionBody = transactionWrapper["body"].asText()
+            val transaction = objectMapper.readValue<Transaction>(transactionBody)
+
+            // Inject email into transaction
+            context.logger.log("📩 Transaction for user: $email\n")
+            val stock = processTransaction(transaction, email)
+
             buildCorsResponse(200, objectMapper.writeValueAsString(stock))
         }.getOrElse { e ->
             context.logger.log("Error: ${e.message}")
@@ -35,11 +55,11 @@ class TransactionLambdaHandler(
         }
     }
 
-    private fun processTransaction(transaction: Transaction): Stock {
-        val currentStocks = dbService.getStocks()
+    private fun processTransaction(transaction: Transaction, email: String): Stock {
+        val currentStocks = dbService.getStocks(email)
         val stock = currentStocks.find { it.symbol == transaction.symbol }?.let { existingStock: Stock ->
             updateExistingStock(existingStock, transaction)
-        } ?: createNewStock(transaction)
+        } ?: createNewStock(transaction, email)
 
         return enrichStockData(stock)
     }
@@ -53,10 +73,11 @@ class TransactionLambdaHandler(
         )
     }
 
-    private fun createNewStock(transaction: Transaction): Stock {
+    private fun createNewStock(transaction: Transaction, email: String): Stock {
         val transactions = listOf(transaction)
         return Stock(
             symbol = transaction.symbol,
+            email = email,
             transactions = transactions,
             moneyInvested = financialCalculationsService.calculateMoneyInvested(transactions),
             ownershipPeriods = financialCalculationsService.calculateOwnershipPeriods(transactions)
