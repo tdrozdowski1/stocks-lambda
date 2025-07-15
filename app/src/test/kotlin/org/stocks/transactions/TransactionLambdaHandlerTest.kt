@@ -58,6 +58,8 @@ class TransactionLambdaHandlerTest {
     @Test
     fun `should handle valid POST request and return stock response with dividends`() {
         // Arrange
+        val email = "user@example.com"
+
         val transaction = Transaction(
             symbol = "PEP",
             date = "2024-12-09",
@@ -66,12 +68,19 @@ class TransactionLambdaHandlerTest {
             price = BigDecimal("1"),
             commission = BigDecimal("1")
         )
+
+        val transactionJson = objectMapper.writeValueAsString(transaction)
+        val wrappedBody = objectMapper.writeValueAsString(mapOf("body" to transactionJson))
         val input = mapOf(
             "httpMethod" to "POST",
-            "body" to objectMapper.writeValueAsString(transaction)
+            "body" to wrappedBody,
+            "requestContext" to mapOf(
+                "authorizer" to mapOf(
+                    "claims" to mapOf("email" to email)
+                )
+            )
         )
 
-        // Sample dividend and ownership period
         val dividend = DividendDetail(
             date = "2024-12-10",
             label = "Q4 Dividend",
@@ -94,7 +103,6 @@ class TransactionLambdaHandlerTest {
             quantity = BigDecimal("14")
         )
 
-        // Processed dividend with expected values
         val processedDividend = dividend.copy(
             quantity = BigDecimal("14"),
             totalDividend = BigDecimal("7.0"), // 14 * 0.5
@@ -106,7 +114,7 @@ class TransactionLambdaHandlerTest {
         )
 
         // Mock dependencies
-        whenever(dbService.getStocks()).thenReturn(emptyList())
+        whenever(dbService.getStocks(email)).thenReturn(emptyList())
         whenever(financialCalculationsService.calculateMoneyInvested(listOf(transaction))).thenReturn(BigDecimal("15"))
         whenever(financialCalculationsService.calculateOwnershipPeriods(listOf(transaction))).thenReturn(listOf(ownershipPeriod))
         whenever(financialModelingService.getStockPrice("PEP")).thenReturn(BigDecimal.ONE)

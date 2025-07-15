@@ -45,7 +45,8 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
                     moneyInvested = item["moneyInvested"]?.n()?.toBigDecimal() ?: BigDecimal.ZERO,
                     ownershipPeriods = objectMapper.readValue(item["ownershipPeriods"]?.s() ?: "[]", object : TypeReference<List<OwnershipPeriod>>() {}),
                     transactions = objectMapper.readValue(item["transactions"]?.s() ?: "[]", object : TypeReference<List<
-                            Transaction>>() {})
+                            Transaction>>() {}),
+                    email = item["email"]?.s() ?: "",
                 )
             }
 
