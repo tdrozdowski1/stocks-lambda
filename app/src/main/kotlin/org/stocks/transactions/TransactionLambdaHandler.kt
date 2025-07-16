@@ -19,6 +19,8 @@ class TransactionLambdaHandler(
 
     override fun handleRequest(input: Map<String, Any>, context: Context): Map<String, Any> {
         context.logger.log("Raw input: $input\n")
+        context.logger.log("Input body: ${input["body"]}\n")
+        context.logger.log("Input body type: ${input["body"]?.javaClass?.name}\n")
 
         if (input["httpMethod"] == "OPTIONS") {
             return buildCorsResponse(200, "")
@@ -27,30 +29,27 @@ class TransactionLambdaHandler(
         val transactionJson = input["body"] as? String
             ?: return buildCorsResponse(400, "No transaction body provided")
 
-        // 🔒 Extract claims from requestContext.authorizer.claims.email
-        val email = try {
-            val requestContext = input["requestContext"] as? Map<*, *>
-            val authorizer = requestContext?.get("authorizer") as? Map<*, *>
-            val claims = authorizer?.get("claims") as? Map<*, *>
-            claims?.get("email") as? String ?: "unknown@example.com"
-        } catch (e: Exception) {
-            context.logger.log("⚠️ Failed to extract email from claims: ${e.message}")
-            "unknown@example.com"
-        }
-
+        // Parse the transaction JSON directly
         return runCatching {
-            // Your frontend wraps the transaction in a { body: "..." }
-            val transactionWrapper = objectMapper.readTree(transactionJson)
-            val transactionBody = transactionWrapper["body"].asText()
-            val transaction = objectMapper.readValue<Transaction>(transactionBody)
+            val transaction = objectMapper.readValue<Transaction>(transactionJson)
+            context.logger.log("Parsed transaction: $transaction\n")
 
-            // Inject email into transaction
+            // Extract email
+            val email = try {
+                val requestContext = input["requestContext"] as? Map<*, *>
+                val authorizer = requestContext?.get("authorizer") as? Map<*, *>
+                val claims = authorizer?.get("claims") as? Map<*, *>
+                claims?.get("email") as? String ?: "unknown@example.com"
+            } catch (e: Exception) {
+                context.logger.log("⚠️ Failed to extract email from claims: ${e.message}")
+                "unknown@example.com"
+            }
+
             context.logger.log("📩 Transaction for user: $email\n")
             val stock = processTransaction(transaction, email)
-
             buildCorsResponse(200, objectMapper.writeValueAsString(stock))
         }.getOrElse { e ->
-            context.logger.log("Error: ${e.message}")
+            context.logger.log("Error parsing transaction: ${e.message}")
             buildCorsResponse(400, "Invalid transaction format: ${e.message}")
         }
     }
