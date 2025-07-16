@@ -2,6 +2,7 @@ import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.LambdaLogger
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -70,10 +71,9 @@ class TransactionLambdaHandlerTest {
         )
 
         val transactionJson = objectMapper.writeValueAsString(transaction)
-        val wrappedBody = objectMapper.writeValueAsString(mapOf("body" to transactionJson))
         val input = mapOf(
             "httpMethod" to "POST",
-            "body" to wrappedBody,
+            "body" to transactionJson, // Directly pass the transaction JSON string
             "requestContext" to mapOf(
                 "authorizer" to mapOf(
                     "claims" to mapOf("email" to email)
@@ -135,7 +135,7 @@ class TransactionLambdaHandlerTest {
         assertEquals("Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token", headers["Access-Control-Allow-Headers"])
 
         val responseBody = response["body"] as String
-        val returnedStock = objectMapper.readValue(responseBody, Stock::class.java)
+        val returnedStock = objectMapper.readValue<Stock>(responseBody)
         assertEquals("PEP", returnedStock.symbol)
         assertEquals(BigDecimal.ONE, returnedStock.currentPrice)
         assertEquals(1, returnedStock.transactions.size)
