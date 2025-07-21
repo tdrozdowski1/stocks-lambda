@@ -33,8 +33,24 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
         return try {
             context.logger.log("Processing GET request")
 
+            // Extract email from Cognito claims
+            val email = try {
+                val requestContext = event["requestContext"] as? Map<*, *>
+                val authorizer = requestContext?.get("authorizer") as? Map<*, *>
+                val claims = authorizer?.get("claims") as? Map<*, *>
+                claims?.get("email") as? String ?: return errorResponse("Authentication error", "No email found in token")
+            } catch (e: Exception) {
+                context.logger.log("Failed to extract email: ${e.message}")
+                return errorResponse("Authentication error", e.message ?: "Unknown error")
+            }
+
+            context.logger.log("Retrieving stocks for email: $email")
+
+            // Modified scan to filter by email
             val scanRequest = ScanRequest.builder()
                 .tableName("Stocks")
+                .filterExpression("email = :email")
+                .expressionAttributeValues(mapOf(":email" to software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().s(email).build()))
                 .build()
 
             val scanResponse = dynamoDbClient.scan(scanRequest)
@@ -44,8 +60,7 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
                     symbol = item["symbol"]?.s() ?: "",
                     moneyInvested = item["moneyInvested"]?.n()?.toBigDecimal() ?: BigDecimal.ZERO,
                     ownershipPeriods = objectMapper.readValue(item["ownershipPeriods"]?.s() ?: "[]", object : TypeReference<List<OwnershipPeriod>>() {}),
-                    transactions = objectMapper.readValue(item["transactions"]?.s() ?: "[]", object : TypeReference<List<
-                            Transaction>>() {}),
+                    transactions = objectMapper.readValue(item["transactions"]?.s() ?: "[]", object : TypeReference<List<Transaction>>() {}),
                     email = item["email"]?.s() ?: "",
                 )
             }
@@ -60,7 +75,7 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
                 )
             }
 
-            context.logger.log("Retrieved ${updatedStocks.size} stocks")
+            context.logger.log("Retrieved ${updatedStocks.size} stocks for email: $email")
             successResponse(updatedStocks)
         } catch (e: Exception) {
             context.logger.log("Error retrieving stocks: ${e.message}")

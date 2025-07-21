@@ -19,10 +19,12 @@ class DbService(
     fun getStocks(email: String): List<Stock> {
         val queryRequest = QueryRequest.builder()
             .tableName(tableName)
-            .indexName(email)
+            .indexName("EmailIndex")
             .keyConditionExpression("email = :email")
             .expressionAttributeValues(mapOf(":email" to AttributeValue.builder().s(email).build()))
             .build()
+
+        println("📤 QueryRequest: $queryRequest")
 
         val response = dynamoDbClient.query(queryRequest)
         val items = response.items()
@@ -43,6 +45,7 @@ class DbService(
     fun saveStock(stock: Stock) {
         val item = mutableMapOf<String, AttributeValue>(
             "symbol" to AttributeValue.builder().s(stock.symbol).build(),
+            "email" to AttributeValue.builder().s(stock.email).build(),
             "moneyInvested" to AttributeValue.builder().n(stock.moneyInvested.toString()).build(),
             "ownershipPeriods" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.ownershipPeriods)).build(),
             "transactions" to AttributeValue.builder().s(objectMapper.writeValueAsString(stock.transactions)).build()
