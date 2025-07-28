@@ -46,7 +46,7 @@ class TransactionLambdaHandler(
             }
 
             context.logger.log("📩 Transaction for user: $email\n")
-            val stock = processTransaction(transaction, email)
+            val stock = processTransaction(transaction, email, context)
             buildCorsResponse(200, objectMapper.writeValueAsString(stock))
         }.getOrElse { e ->
             context.logger.log("Error parsing transaction: ${e.message}")
@@ -54,13 +54,13 @@ class TransactionLambdaHandler(
         }
     }
 
-    private fun processTransaction(transaction: Transaction, email: String): Stock {
+    private fun processTransaction(transaction: Transaction, email: String, context: Context): Stock {
         val currentStocks = dbService.getStocks(email)
         val stock = currentStocks.find { it.symbol == transaction.symbol }?.let { existingStock: Stock ->
             updateExistingStock(existingStock, transaction)
         } ?: createNewStock(transaction, email)
 
-        return enrichStockData(stock)
+        return enrichStockData(stock, context)
     }
 
     private fun updateExistingStock(stock: Stock, transaction: Transaction): Stock {
@@ -83,9 +83,9 @@ class TransactionLambdaHandler(
         )
     }
 
-    private fun enrichStockData(stock: Stock): Stock {
-        val updatedStock = stock.copy(currentPrice = financialModelingService.getStockPrice(stock.symbol))
-        val dividendsData = financialModelingService.getDividends(stock.symbol)
+    private fun enrichStockData(stock: Stock, context: Context): Stock {
+        val updatedStock = stock.copy(currentPrice = financialModelingService.getStockPrice(stock.symbol, context))
+        val dividendsData = financialModelingService.getDividends(stock.symbol, context)
         val processedDividends = dividendService.processDividends(dividendsData, stock.ownershipPeriods)
 
         return updatedStock.copy(
