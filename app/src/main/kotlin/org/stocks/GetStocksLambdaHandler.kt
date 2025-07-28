@@ -20,7 +20,7 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
     private val objectMapper = jacksonObjectMapper()
 
     override fun handleRequest(event: Map<String, Any>, context: Context): Map<String, Any> {
-        context.logger.log("Received event: $event")
+        context.logger.log("Full event: ${objectMapper.writeValueAsString(event)}")
 
         if (event["httpMethod"] == "OPTIONS") {
             return mapOf(
@@ -67,8 +67,8 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
 
             val updatedStocks = stocks.map { stock ->
                 stock.copy(
-                    currentPrice = financialModelingService.getStockPrice(stock.symbol),
-                    dividends = financialModelingService.getDividends(stock.symbol),
+                    currentPrice = financialModelingService.getStockPrice(stock.symbol, context),
+                    dividends = financialModelingService.getDividends(stock.symbol, context),
                     totalDividendValue = dividendService.calculateTotalDividends(stock.dividends ?: emptyList()),
                     totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(stock.dividends ?: emptyList()),
                     taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(stock.dividends ?: emptyList()),
@@ -76,6 +76,9 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
             }
 
             context.logger.log("Retrieved ${updatedStocks.size} stocks for email: $email")
+
+            context.logger.log("Retrieved $updatedStocks stocks for email: $email")
+
             successResponse(updatedStocks)
         } catch (e: Exception) {
             context.logger.log("Error retrieving stocks: ${e.message}")
