@@ -66,12 +66,16 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
             }
 
             val updatedStocks = stocks.map { stock ->
+                val dividends = financialModelingService.getDividends(stock.symbol, context);
+                val processedDividends = dividendService.processDividends(dividends, stock.ownershipPeriods ?: emptyList());
+
+
                 stock.copy(
                     currentPrice = financialModelingService.getStockPrice(stock.symbol, context),
-                    dividends = dividendService.processDividends(financialModelingService.getDividends(stock.symbol, context), stock.ownershipPeriods ?: emptyList()),
-                    totalDividendValue = dividendService.calculateTotalDividends(stock.dividends ?: emptyList()),
-                    totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(stock.dividends ?: emptyList()),
-                    taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(stock.dividends ?: emptyList()),
+                    dividends = processedDividends,
+                    totalDividendValue = dividendService.calculateTotalDividends(processedDividends),
+                    totalWithholdingTaxPaid = dividendService.calculateTotalWithholdingTaxPaid(processedDividends),
+                    taxToBePaidInPoland = dividendService.calculateTaxToBePaidInPoland(processedDividends),
                 )
             }
 
