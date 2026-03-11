@@ -47,43 +47,40 @@ class FinancialModelingService(
         }
     }
 
-    fun getDividends(symbol: String, context: Context): List<DividendDetail> {
-        context.logger.log("Fetching dividends for symbol: $symbol")
+
+    fun getDividends(symbol: String, from: String, to: String, context: Context): List<DividendDetail> {
+        context.logger.log("Fetching dividends (calendar) for symbol: $symbol, range: $from..$to")
+
+        val url = "$baseUrlStable/dividends-calendar?from=$from&to=$to&apikey=$apiKey"
+        val request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build()
 
         try {
-            val request = HttpRequest.newBuilder()
-                    .uri(URI.create("$baseUrlV3/historical-price-full/stock_dividend?symbol=$symbol&apikey=$apiKey"))
-                    .GET()
-                    .build()
-
             val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            context.logger.log("Received response for dividends: ${response.body()}")
+            context.logger.log("Received response for dividends calendar: ${response.body()}")
 
             val json = objectMapper.readTree(response.body())
-            val historical = json["historical"]
+            if (!json.isArray) return emptyList()
 
-            if (historical == null || historical.isEmpty) {
-                context.logger.log("No dividend history found for $symbol")
-                return emptyList()
-            }
-
-            val dividends = historical.map {
-                DividendDetail(
-                        date = it["date"].asText(),
-                        label = it["label"].asText(),
-                        adjDividend = it["adjDividend"].decimalValue(),
-                        dividend = it["dividend"].decimalValue(),
-                        recordDate = it["recordDate"].asText(),
-                        paymentDate = it["paymentDate"].asText(),
-                        declarationDate = it["declarationDate"].asText()
-                )
-            }
-
-            context.logger.log("Successfully retrieved ${dividends.size} dividends for $symbol")
-            return dividends
-
+            return json
+                    .asSequence()
+                    .filter { it["symbol"]?.asText() == symbol }
+                    .map { node ->
+                        DividendDetail(
+                                date = node["date"]?.asText().orEmpty(),
+                                label = node["date"]?.asText().orEmpty(),
+                                adjDividend = node["adjDividend"]?.decimalValue() ?: java.math.BigDecimal.ZERO,
+                                dividend = node["dividend"]?.decimalValue() ?: java.math.BigDecimal.ZERO,
+                                recordDate = node["recordDate"]?.asText().orEmpty(),
+                                paymentDate = node["paymentDate"]?.asText().orEmpty(),
+                                declarationDate = node["declarationDate"]?.asText().orEmpty()
+                        )
+                    }
+                    .toList()
         } catch (e: Exception) {
-            context.logger.log("Error fetching dividends for $symbol: ${e.message}")
+            context.logger.log("Error fetching dividends calendar for $symbol: ${e.message}")
             throw e
         }
     }
