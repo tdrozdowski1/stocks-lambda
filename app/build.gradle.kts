@@ -50,6 +50,7 @@ java {
 task<Jar>("fatJar") {
     archiveBaseName.set("lambda-app")
     archiveVersion.set("1.0.0")
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
     from(sourceSets.main.get().output)
     dependsOn(configurations.runtimeClasspath)
     

@@ -14,7 +14,8 @@ class FinancialModelingService(
         private val httpClient: HttpClient = HttpClient.newHttpClient(),
         private val objectMapper: ObjectMapper = jacksonObjectMapper(),
         private val apiKey: String = "tQr6CjESc8UVhkFN4Eugr7WXpyYCu82D",
-        private val baseUrl: String = "https://financialmodelingprep.com/stable"
+        private val baseUrlStable: String = "https://financialmodelingprep.com/stable",
+        private val baseUrlV3: String = "https://financialmodelingprep.com/v3"
 ) {
 
     fun getStockPrice(symbol: String, context: Context): BigDecimal {
@@ -22,7 +23,7 @@ class FinancialModelingService(
 
         try {
             val request = HttpRequest.newBuilder()
-                    .uri(URI.create("$baseUrl/quote?symbol=$symbol&apikey=$apiKey"))
+                    .uri(URI.create("$baseUrlStable/quote?symbol=$symbol&apikey=$apiKey"))
                     .GET()
                     .build()
 
@@ -51,7 +52,7 @@ class FinancialModelingService(
 
         try {
             val request = HttpRequest.newBuilder()
-                    .uri(URI.create("$baseUrl/historical-price-full/stock_dividend?symbol=$symbol&apikey=$apiKey"))
+                    .uri(URI.create("$baseUrlV3/historical-price-full/stock_dividend?symbol=$symbol&apikey=$apiKey"))
                     .GET()
                     .build()
 
