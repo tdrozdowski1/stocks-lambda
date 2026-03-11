@@ -90,8 +90,8 @@ class TransactionLambdaHandler(
 
         val fromDate = stock.ownershipPeriods.minByOrNull { it.startDate }!!.startDate;
         val toDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-
         val dividendsData = financialModelingService.getDividends(stock.symbol, fromDate, toDate, context)
+
         val processedDividends = dividendService.processDividends(dividendsData, stock.ownershipPeriods)
 
         return updatedStock.copy(

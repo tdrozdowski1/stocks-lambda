@@ -12,6 +12,8 @@ import org.stocks.transactions.Transaction
 import org.stocks.transactions.services.DividendService
 import org.stocks.transactions.services.FinancialModelingService
 import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
     private val financialModelingService: FinancialModelingService = FinancialModelingService()
@@ -66,7 +68,11 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
             }
 
             val updatedStocks = stocks.map { stock ->
-                val dividends = financialModelingService.getDividends(stock.symbol, context);
+
+                val fromDate = stock.ownershipPeriods.minByOrNull { it.startDate }!!.startDate;
+                val toDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                val dividends = financialModelingService.getDividends(stock.symbol, fromDate, toDate, context)
+
                 val processedDividends = dividendService.processDividends(dividends, stock.ownershipPeriods ?: emptyList());
 
 
