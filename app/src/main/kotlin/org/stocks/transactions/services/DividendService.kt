@@ -88,17 +88,42 @@ class DividendService(
             .setScale(SCALE, ROUNDING_MODE)
     }
 
-    private fun getHistoricalExchangeRate(fromCurrency: String, toCurrency: String, date: LocalDate): BigDecimal? {
-        val currencyPair = "$fromCurrency$toCurrency"
-        val url = "$baseUrl/historical-price-full/$currencyPair?from=$date&to=$date&apikey=$apiKey"
-        val request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build()
+    private fun getHistoricalExchangeRate(
+            fromCurrency: String,
+            toCurrency: String,
+            date: LocalDate
+    ): BigDecimal? {
+
+        val url =
+                "https://www.alphavantage.co/query" +
+                        "?function=FX_DAILY" +
+                        "&from_symbol=$fromCurrency" +
+                        "&to_symbol=$toCurrency" +
+                        "&apikey=$apiKey"
+
+        val request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build()
+
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         val root = objectMapper.readTree(response.body())
-        val historical = root.get("historical")?.takeIf { it.isArray && it.size() > 0 }
-            ?: return null
 
-        val rate = historical[0].get("close")?.asDouble()?.toBigDecimal()
-        return rate?.setScale(SCALE, ROUNDING_MODE)?.also { println("✅ Found $currencyPair rate for $date: $it") }
+        // Handle rate-limit / info responses
+        if (root.has("Note") || root.has("Information")) {
+            println("⚠️ Alpha Vantage FX rate limit hit")
+            return null
+        }
+
+        val series = root.get("Time Series FX (Daily)") ?: return null
+        val dayNode = series.get(date.toString()) ?: return null
+
+        val rate = dayNode.get("4. close")?.asText()?.toBigDecimal()
+                ?: return null
+
+        return rate
+                .setScale(SCALE, ROUNDING_MODE)
+                .also { println("✅ Found $fromCurrency/$toCurrency rate for $date: $it") }
     }
 
     private fun safeParseDate(dateStr: String): LocalDate? {

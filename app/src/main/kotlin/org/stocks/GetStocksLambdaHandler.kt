@@ -75,7 +75,6 @@ class GetStocksLambda : RequestHandler<Map<String, Any>, Map<String, Any>> {
 
                 val processedDividends = dividendService.processDividends(dividends, stock.ownershipPeriods ?: emptyList());
 
-
                 stock.copy(
                     currentPrice = financialModelingService.getStockPrice(stock.symbol, context),
                     dividends = processedDividends,
