@@ -83,15 +83,14 @@ class FinancialModelingService(
     }
 
     fun getDividends(
-            symbol: String,
-            from: String,
-            to: String,
-            context: Context
+    symbol: String,
+    from: String,
+    to: String,
+    context: Context
     ): List<DividendDetail> {
 
         context.logger.log("Fetching dividends (Alpha Vantage) for symbol: $symbol, range: $from..$to\n")
 
-        // ✅ FIX: use apiKeyAlphaVantage (NOT apiKey used for FMP)
         val url = "$baseUrlAlphaVantage?function=DIVIDENDS&symbol=$symbol&apikey=$apiKeyAlphaVantage"
         val request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -99,8 +98,7 @@ class FinancialModelingService(
                 .build()
 
         val body = withAlphaVantageRetry(context, operation = "DIVIDENDS:$symbol") {
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            response.body()
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString()).body()
         }
 
         context.logger.log("Received response for dividends (Alpha Vantage): $body\n")
@@ -108,10 +106,17 @@ class FinancialModelingService(
 
         throwIfAlphaVantageError(root, symbol)
 
-        // Keep your expected response structure:
-        val dividendsNode = root.get("dividendsPerShare")
-        if (dividendsNode == null || !dividendsNode.isArray) {
-            context.logger.log("Unexpected Alpha Vantage response for $symbol (no dividendsPerShare array). Body: $body\n")
+        val dividendsNode =
+                when {
+                    root.has("data") && root.get("data").isArray -> root.get("data")
+                    root.has("dividendsPerShare") && root.get("dividendsPerShare").isArray -> root.get("dividendsPerShare")
+                    else -> null
+                }
+
+        if (dividendsNode == null) {
+            context.logger.log(
+                    "Unexpected Alpha Vantage response for $symbol (no data/dividendsPerShare array). Body: $body\n"
+            )
             return emptyList()
         }
 
@@ -121,24 +126,27 @@ class FinancialModelingService(
         val results = mutableListOf<DividendDetail>()
 
         for (node in dividendsNode) {
-            val dateStr = node.get("exDividendDate")?.asText() ?: continue
-            val d = runCatching { LocalDate.parse(dateStr) }.getOrNull() ?: continue
-            if (d.isBefore(fromDate) || d.isAfter(toDate)) continue
+            val dateStr = textOrNull(node, "ex_dividend_date") ?: textOrNull(node, "exDividendDate") ?: continue
+            val exDate = runCatching { LocalDate.parse(dateStr) }.getOrNull() ?: continue
+            if (exDate.isBefore(fromDate) || exDate.isAfter(toDate)) continue
 
-            val dividendAmount = runCatching {
-                BigDecimal(node.get("amount")?.asText() ?: "0")
-            }.getOrDefault(BigDecimal.ZERO)
+            val amountStr = textOrNull(node, "amount") ?: "0"
+            val dividendAmount = runCatching { BigDecimal(amountStr) }.getOrDefault(BigDecimal.ZERO)
 
             if (dividendAmount > BigDecimal.ZERO) {
+                val recordDate = textOrNull(node, "record_date") ?: textOrNull(node, "recordDate") ?: ""
+                val paymentDate = textOrNull(node, "payment_date") ?: textOrNull(node, "paymentDate") ?: ""
+                val declarationDate = textOrNull(node, "declaration_date") ?: textOrNull(node, "declarationDate") ?: ""
+
                 results.add(
                         DividendDetail(
                                 date = dateStr,
                                 label = dateStr,
                                 dividend = dividendAmount,
-                                adjDividend = dividendAmount, // you assume AV already adjusted
-                                recordDate = node.get("recordDate")?.asText() ?: "",
-                                paymentDate = node.get("paymentDate")?.asText() ?: "",
-                                declarationDate = node.get("declarationDate")?.asText() ?: ""
+                                adjDividend = dividendAmount, // assuming AV gives cash amount
+                                recordDate = recordDate,
+                                paymentDate = paymentDate,
+                                declarationDate = declarationDate
                         )
                 )
             }
@@ -148,6 +156,22 @@ class FinancialModelingService(
         context.logger.log("Successfully retrieved ${results.size} dividends for $symbol from Alpha Vantage\n")
         return results
     }
+
+    /**
+     * Returns null if:
+     * - missing
+     * - explicit JSON null
+     * - text is "None" (as in your sample)
+     * - blank
+     */
+    private fun textOrNull(node: JsonNode, field: String): String? {
+        val v = node.get(field) ?: return null
+        if (v.isNull) return null
+        val s = v.asText()
+        if (s.isBlank() || s.equals("None", ignoreCase = true)) return null
+        return s
+    }
+
 
     /**
      * Executes [call] with:
